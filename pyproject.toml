@@ -1,0 +1,34 @@
+[project]
+name = "piscine-ph"
+version = "0.1.0"
+description = "Protocole journalise de correction pH et TAC pour piscine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "typer>=0.15,<1",
+]
+
+[project.scripts]
+piscine-ph = "piscine_ph.cli:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/piscine_ph"]
+force-include = { "src/piscine_ph/defaults.json" = "piscine_ph/defaults.json" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

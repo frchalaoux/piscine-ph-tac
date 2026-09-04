@@ -1,0 +1,23 @@
+{
+  "_documentation": "Valeurs opérationnelles par défaut. Elles sont versionnées et validées par settings.py. Les constantes physico-chimiques et les limites de sécurité restent documentées dans chemistry.py.",
+  "schema_version": 1,
+  "protocol": {
+    "pool_volume_m3": 46.0,
+    "initial_ph": 4.1,
+    "intermediate_ph": 6.0,
+    "target_ph": 7.2,
+    "initial_tac_ppm": 50.0,
+    "target_tac_ppm": 80.0,
+    "tac_measurement_step_ppm": 10.0,
+    "bucket_volume_l": 10.0,
+    "naoh_concentration_g_l": 300.0
+  },
+  "workflow": {
+    "naoh_large_gap_ph": 1.0,
+    "naoh_medium_gap_ph": 0.3,
+    "naoh_large_dose_ml": 250.0,
+    "naoh_medium_dose_ml": 100.0,
+    "naoh_small_dose_ml": 50.0,
+    "bicarbonate_batch_max_kg": 0.5
+  }
+}
