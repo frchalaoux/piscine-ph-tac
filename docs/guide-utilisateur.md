@@ -155,6 +155,37 @@ uv run piscine-ph start
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - Le dossier n'est pas trouvé : revenir à l'étape 1 et vérifier son emplacement avec l'explorateur de fichiers.
 
+## Modifier les valeurs proposées par défaut
+
+Les valeurs affichées par défaut au démarrage — volume, pH de départ, objectifs pH/TAC, concentration de soude, volume du seau et tailles indicatives des apports — sont regroupées dans :
+
+```text
+src/piscine_ph/defaults.json
+```
+
+L'utilisateur peut modifier ce fichier avec un éditeur de texte avant de créer un nouveau protocole. Par exemple, pour un bassin de 35 m3 et un seau de 12 L, modifier seulement les nombres concernés :
+
+```json
+"pool_volume_m3": 35.0,
+"bucket_volume_l": 12.0
+```
+
+Conserver impérativement la structure JSON : guillemets autour des noms, virgules entre les lignes et point pour les décimales. Ne pas modifier `schema_version`.
+
+Les clés, unités et conséquences de chaque réglage sont expliquées dans la [documentation de configuration](configuration.md). Les constantes chimiques, tolérances et protections du seau ne se trouvent volontairement pas dans ce fichier ; elles ne doivent pas être modifiées pour adapter un bassin.
+
+Après l'enregistrement, relancer la commande :
+
+```bash
+uv run piscine-ph start
+```
+
+La modification n'agit que sur un **nouveau** protocole. Chaque archive conserve ses propres paramètres dans son fichier JSON : elle n'est jamais réécrite par un changement de `defaults.json`.
+
+Les options données directement à la commande `start`, par exemple `--volume-m3 46`, restent prioritaires sur les valeurs du fichier JSON.
+
+Si un protocole est actif, `start` le reprend et n'applique donc pas les nouveaux réglages. Terminer ou annuler le protocole actif, puis lancer `start` ; ou utiliser explicitement `uv run piscine-ph start --force` pour créer une nouvelle archive sans supprimer l'ancienne.
+
 ## Démarrer un protocole
 
 Pour utiliser les valeurs prévues pour le bassin de 46 m3 :
