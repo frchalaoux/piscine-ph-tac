@@ -91,7 +91,7 @@ Les transitions ne sont effectuées que dans `ProtocolService` :
 | `correct_last_measurement` | Corrige une lecture, sans retirer le produit comptabilisé. |
 | `cancel_protocol` | Archive le protocole comme annulé sans effacer son historique. |
 
-`JsonProtocolRepository.save()` écrit d'abord un fichier `.tmp`, puis le remplace : cette écriture atomique évite normalement une archive partiellement écrite si le programme est interrompu.
+`JsonProtocolRepository` recrée `data/protocoles/` à son initialisation si le dossier est absent, ce qui rend un clone GitHub immédiatement utilisable. `save()` écrit ensuite d'abord un fichier `.tmp`, puis le remplace : cette écriture atomique évite normalement une archive partiellement écrite si le programme est interrompu.
 
 Une archive est active tant que son étape n'est ni `termine` ni `annule`. `start` reprend la plus récente archive active ; `start --force` crée une nouvelle archive sans modifier la précédente.
 

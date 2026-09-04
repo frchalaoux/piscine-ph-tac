@@ -17,8 +17,13 @@ class JsonProtocolRepository:
     """Gère les archives datées sous un répertoire de données donné."""
 
     def __init__(self, root: Path | str = "data/protocoles") -> None:
-        """Initialise le dépôt sans créer de fichier ni de répertoire immédiatement."""
+        """Initialise le dépôt et recrée le répertoire de données s'il manque.
+
+        Ainsi, un clone GitHub — qui ne contient pas les journaux ignorés — est
+        immédiatement prêt à recevoir sa première archive.
+        """
         self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
 
     def create_path(self) -> Path:
         """Réserve un chemin daté non existant, avec suffixe si nécessaire."""

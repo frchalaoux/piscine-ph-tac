@@ -41,6 +41,16 @@ def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     assert resumed.archive_name == created.archive_name
 
 
+def test_repository_recreates_missing_data_directory(tmp_path) -> None:
+    """Un clone sans journaux opérationnels peut démarrer sans préparation manuelle."""
+    root = tmp_path / "data" / "protocoles"
+
+    repository = JsonProtocolRepository(root)
+
+    assert root.is_dir()
+    assert repository.active() is None
+
+
 def test_cancel_pending_naoh_preserves_last_measurements(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     created = service.start(ProtocolConfig())
