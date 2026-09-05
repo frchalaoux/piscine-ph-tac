@@ -19,6 +19,7 @@ from .models import (
     ProtocolConfig,
     ProtocolState,
     ProtocolStep,
+    TreatmentContext,
 )
 from .repository import JsonProtocolRepository
 from .service import ProtocolService
@@ -117,6 +118,26 @@ def show_treatment(state: ProtocolState) -> None:
         typer.secho(f"Alerte traitement : {warning}", fg=typer.colors.YELLOW)
 
 
+def show_supply_estimate(state: ProtocolState) -> None:
+    """Affiche le repère d'achat archivé, sans le présenter comme un dosage."""
+    estimate = state.supply_estimate
+    if estimate is None:
+        return
+    margin = (
+        " ; marge galets stabilises incluse" if estimate.includes_stabilized_chlorine_margin else ""
+    )
+    typer.secho("Approvisionnement indicatif (pas une dose) :", fg=typer.colors.CYAN)
+    typer.echo(
+        f"Soude 300 g/L : {estimate.naoh_solution_recommended_l:.0f} L a acheter "
+        "(repere prudent, non predictif)."
+    )
+    typer.echo(
+        f"Bicarbonate : {estimate.bicarbonate_recommended_kg:.0f} kg a acheter "
+        f"(besoin theorique {estimate.bicarbonate_theoretical_kg:.2f} kg, "
+        f"TAC de depart {estimate.basis_tac_ppm:.0f} ppm{margin})."
+    )
+
+
 def show_bucket_preparation(naoh_ml: float, water_l: float, useful_volume_l: float) -> None:
     """Présente les volumes à préparer dans le seau pour une dose de NaOH."""
     typer.secho("Prochaine dose preparee", fg=typer.colors.GREEN)
@@ -132,6 +153,15 @@ def start(
     target_ph: float = typer.Option(SETTINGS.protocol.target_ph, min=0.01, max=13.99),
     initial_tac: float = typer.Option(SETTINGS.protocol.initial_tac_ppm, min=0.01),
     bucket_l: float = typer.Option(SETTINGS.protocol.bucket_volume_l, min=0.01),
+    electrolysis: Annotated[
+        ElectrolysisStatus, typer.Option(help="Etat initial : inconnu, en_marche ou arretee.")
+    ] = ElectrolysisStatus.UNKNOWN,
+    chlorine: Annotated[
+        ChlorineTreatment,
+        typer.Option(
+            help="Desinfectant initial : inconnu, galets_stabilises, dichlore_stabilise ou chlore_non_stabilise."
+        ),
+    ] = ChlorineTreatment.UNKNOWN,
     force: bool = typer.Option(
         False, help="Archive un nouveau protocole meme si un autre est actif."
     ),
@@ -148,7 +178,14 @@ def start(
             initial_tac_ppm=initial_tac,
             bucket_volume_l=bucket_l,
         )
-        state = protocol_service.start(config, replace_active=force)
+        state = protocol_service.start(
+            config,
+            treatment=TreatmentContext(
+                electrolysis_status=electrolysis,
+                chlorine_treatment=chlorine,
+            ),
+            replace_active=force,
+        )
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
     if existing and not force:
@@ -159,6 +196,7 @@ def start(
     if state.initial_coherence and state.initial_coherence.warnings:
         for warning in state.initial_coherence.warnings:
             typer.secho(f"Alerte initiale : {warning}", fg=typer.colors.YELLOW)
+    show_supply_estimate(state)
     show_next_command(state)
 
 
@@ -181,6 +219,7 @@ def status() -> None:
         typer.echo(f"Bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg")
     show_cumulative_additions(state)
     show_treatment(state)
+    show_supply_estimate(state)
     show_next_command(state)
 
 
@@ -204,6 +243,7 @@ def treatment(
         raise typer.Exit(1)
     typer.secho("Contexte de traitement enregistre.", fg=typer.colors.GREEN)
     show_treatment(state)
+    show_supply_estimate(state)
 
 
 @app.command("record-tablets")

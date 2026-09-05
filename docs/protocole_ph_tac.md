@@ -41,6 +41,8 @@ Créer un protocole avec ces valeurs :
 uv run piscine-ph start
 ```
 
+La création affiche un plan d'approvisionnement archivé dans le JSON : volume prudent de soude à acheter et bicarbonate théorique calculé depuis le TAC initial, complété par une marge d'achat. Le repère de soude n'est pas une prédiction de consommation, car le pH ne permet pas à lui seul de connaître la demande acide réelle du bassin. La commande `status` réaffiche ce plan.
+
 Ou renseigner des valeurs mesurées différentes :
 
 ```bash

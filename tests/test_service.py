@@ -56,6 +56,22 @@ def test_stabilized_chlorine_context_is_journalized_and_warns_on_measurement(tmp
     assert any("Electrolyse arretee" in warning for warning in warnings)
 
 
+def test_supply_estimate_is_persisted_and_accounts_for_stabilized_tablets(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(ProtocolConfig())
+
+    assert state.supply_estimate is not None
+    assert state.supply_estimate.bicarbonate_theoretical_kg == pytest.approx(3.86, abs=0.01)
+    assert state.supply_estimate.bicarbonate_recommended_kg == 5.0
+    assert state.supply_estimate.naoh_solution_recommended_l == 2.0
+
+    state = service.set_treatment(ElectrolysisStatus.STOPPED, ChlorineTreatment.STABILIZED_TABLETS)
+
+    assert state.supply_estimate is not None
+    assert state.supply_estimate.bicarbonate_recommended_kg == 6.0
+    assert state.supply_estimate.includes_stabilized_chlorine_margin is True
+
+
 def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     created = service.start(ProtocolConfig())

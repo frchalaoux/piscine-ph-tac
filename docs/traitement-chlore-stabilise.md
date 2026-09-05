@@ -27,10 +27,12 @@ La prévision de pH du contrôle de cohérence devient en revanche **indicative*
 Au début de la période temporaire, déclarer le contexte :
 
 ```bash
-uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises
+uv run piscine-ph start --electrolysis arretee --chlorine galets_stabilises
 ```
 
-Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
+Si le protocole existe déjà, utiliser `uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
+
+À la création, l'application affiche et stocke également un plan d'approvisionnement. Il comprend un repère prudent de soude à acheter et une quantité de bicarbonate fondée sur le TAC initial ; une marge additionnelle est incluse avec les galets stabilisés. Cette information sert uniquement à préparer les achats. Elle ne prédit pas la quantité de soude à verser et ne remplace jamais les mesures réalisées entre deux doses.
 
 Journaliser chaque recharge de doseur :
 

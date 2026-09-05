@@ -17,6 +17,7 @@ Le suivi est stocke dans `data/protocoles/` : chaque protocole est archive dans 
 
 Voir le [guide utilisateur](docs/guide-utilisateur.md) pour l'utilisation pas a pas, la [documentation technique](docs/protocole_ph_tac.md) pour les calculs et limites scientifiques, et le [guide développeur](docs/guide-developpeur.md) pour l'architecture et la maintenance.
 Les paramètres par défaut versionnés sont décrits dans la [documentation de configuration](docs/configuration.md).
+La structure et la lecture des paramètres et archives sont détaillées dans la [référence des fichiers JSON](docs/fichiers-json.md).
 Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
 Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
 
