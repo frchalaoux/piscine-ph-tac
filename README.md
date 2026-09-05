@@ -18,6 +18,7 @@ Le suivi est stocke dans `data/protocoles/` : chaque protocole est archive dans 
 Voir le [guide utilisateur](docs/guide-utilisateur.md) pour l'utilisation pas a pas, la [documentation technique](docs/protocole_ph_tac.md) pour les calculs et limites scientifiques, et le [guide développeur](docs/guide-developpeur.md) pour l'architecture et la maintenance.
 Les paramètres par défaut versionnés sont décrits dans la [documentation de configuration](docs/configuration.md).
 Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
+Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
 
 ## Commandes principales
 
@@ -30,6 +31,9 @@ uv run piscine-ph cancel-protocol
 uv run piscine-ph measure --ph 5.2 --tac 50
 uv run piscine-ph plan-tac --tac 50
 uv run piscine-ph measure-tac --ph 6.1 --tac 80
+uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises
+uv run piscine-ph record-tablets --count 2 --unit-mass-g 200
+uv run piscine-ph measure-cya --cya 35
 uv run piscine-ph history
 ```
 

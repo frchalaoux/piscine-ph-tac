@@ -179,6 +179,12 @@ Une alerte ne doit pas être ignorée, mais ne bloque pas mécaniquement le prot
 
 Le TAC théorique peut être affiché avec une décimale pour le bilan chimique, mais le TAC réellement saisi reste un résultat par paliers de 10 ppm. La tolérance de comparaison de +/- 10 ppm tient compte de cette résolution.
 
+### Limite supplémentaire : chlore stabilisé et électrolyse
+
+Le modèle ne représente ni l'électrolyse, ni le trichlore/dichlore, ni le CYA. Le sel résiduel n'affecte pas les bilans NaOH/NaHCO3 du programme ; l'arrêt de la cellule retire cependant une source habituelle de hausse de pH. Les galets stabilisés peuvent en parallèle acidifier l'eau, diminuer le TAC et introduire du CYA. Dans ce contexte, le programme conserve ses bilans théoriques de TAC mais marque la prévision de pH comme indicative.
+
+Utiliser `treatment`, `record-tablets` et `measure-cya` pour archiver ce contexte et les observations réelles. Le nombre de galets n'est jamais converti automatiquement en CYA : une mesure est nécessaire. Consulter le [guide dédié au traitement temporaire](traitement-chlore-stabilise.md) avant d'employer des galets stabilisés sur plusieurs semaines.
+
 Le contrôle initial peut signaler pH 4,1 et TAC 50 ppm comme peu compatibles avec le modèle fermé. Un TAC total est généralement titré vers pH 4,2–4,5 ; une valeur positive à pH 4,1 mérite donc une vérification du test et de l'origine de l'acidité.
 
 Dans ce cas, l'application n'affiche plus de pH théorique : cette prédiction serait trompeuse. Le bilan de TAC reste affiché, mais la remontée de pH réellement mesurée après chaque dose est la référence pour choisir la dose suivante.
