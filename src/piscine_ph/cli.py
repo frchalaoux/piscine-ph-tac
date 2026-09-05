@@ -13,7 +13,13 @@ from typing import Annotated
 import typer
 
 from .chemistry import ChemistryCalculator
-from .models import ProtocolConfig, ProtocolState, ProtocolStep
+from .models import (
+    ChlorineTreatment,
+    ElectrolysisStatus,
+    ProtocolConfig,
+    ProtocolState,
+    ProtocolStep,
+)
 from .repository import JsonProtocolRepository
 from .service import ProtocolService
 from .settings import SETTINGS
@@ -91,6 +97,26 @@ def show_cumulative_additions(state: ProtocolState) -> None:
     )
 
 
+def show_treatment(state: ProtocolState) -> None:
+    """Affiche le contexte de désinfection et les mesures de stabilisant."""
+    treatment = state.treatment
+    typer.echo(
+        "Traitement declare : "
+        f"electrolyse {treatment.electrolysis_status.value}, "
+        f"chlore {treatment.chlorine_treatment.value}."
+    )
+    if state.stabilized_tablets:
+        count = sum(record.count for record in state.stabilized_tablets)
+        typer.echo(f"Galets stabilises journalises : {count}.")
+    if state.cyanuric_acid_measurements:
+        measurement = state.cyanuric_acid_measurements[-1]
+        typer.echo(
+            f"Dernier CYA : {measurement.cya_ppm:.0f} ppm ({measurement.recorded_at:%Y-%m-%d})."
+        )
+    for warning in ProtocolService.treatment_warnings(state):
+        typer.secho(f"Alerte traitement : {warning}", fg=typer.colors.YELLOW)
+
+
 def show_bucket_preparation(naoh_ml: float, water_l: float, useful_volume_l: float) -> None:
     """Présente les volumes à préparer dans le seau pour une dose de NaOH."""
     typer.secho("Prochaine dose preparee", fg=typer.colors.GREEN)
@@ -154,7 +180,62 @@ def status() -> None:
     if state.pending_bicarbonate:
         typer.echo(f"Bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg")
     show_cumulative_additions(state)
+    show_treatment(state)
     show_next_command(state)
+
+
+@app.command("treatment")
+def treatment(
+    electrolysis: Annotated[
+        ElectrolysisStatus, typer.Option(help="Etat : inconnu, en_marche ou arretee.")
+    ],
+    chlorine: Annotated[
+        ChlorineTreatment,
+        typer.Option(
+            help="Desinfectant : inconnu, galets_stabilises, dichlore_stabilise ou chlore_non_stabilise.",
+        ),
+    ],
+) -> None:
+    """Déclare le traitement en cours afin de contextualiser les alertes pH/TAC."""
+    try:
+        state = service().set_treatment(electrolysis, chlorine)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Contexte de traitement enregistre.", fg=typer.colors.GREEN)
+    show_treatment(state)
+
+
+@app.command("record-tablets")
+def record_tablets(
+    count: int = typer.Option(..., min=1, help="Nombre de galets stabilises ajoutes."),
+    unit_mass_g: float | None = typer.Option(
+        None, min=0.01, help="Masse nominale d'un galet, si connue."
+    ),
+    product: str = typer.Option("galet stabilise", help="Libelle lu sur l'emballage."),
+) -> None:
+    """Journalise les galets stabilisés ajoutés, sans estimer leur CYA."""
+    try:
+        state = service().record_stabilized_tablets(count, unit_mass_g, product)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Ajout de galets enregistre.", fg=typer.colors.GREEN)
+    show_treatment(state)
+
+
+@app.command("measure-cya")
+def measure_cya(
+    cya: float = typer.Option(..., min=0, help="Acide cyanurique mesure, en ppm (mg/L)."),
+) -> None:
+    """Journalise une mesure de stabilisant (CYA) réellement effectuée."""
+    try:
+        state = service().record_cyanuric_acid_measurement(cya)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Mesure de CYA enregistree.", fg=typer.colors.GREEN)
+    show_treatment(state)
 
 
 @app.command("dose")
@@ -304,6 +385,7 @@ def menu() -> None:
     typer.echo(
         f"Etape : {state.step} | pH {state.current_ph:.2f} | TAC {state.current_tac_ppm:.1f} ppm"
     )
+    show_treatment(state)
     if state.step is ProtocolStep.COMPLETE:
         typer.echo("Le protocole est termine.")
         show_next_command(state)

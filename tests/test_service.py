@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from piscine_ph.models import ProtocolConfig, ProtocolStep
+from piscine_ph.models import (
+    ChlorineTreatment,
+    ElectrolysisStatus,
+    ProtocolConfig,
+    ProtocolStep,
+)
 from piscine_ph.repository import JsonProtocolRepository
 from piscine_ph.service import ProtocolService
 
@@ -30,6 +35,25 @@ def test_service_rejects_tac_not_matching_the_test_resolution(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="pas de 10 ppm"):
         service.record_naoh_measurement(ph=5.0, tac_ppm=52.0)
+
+
+def test_stabilized_chlorine_context_is_journalized_and_warns_on_measurement(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig())
+    state = service.set_treatment(ElectrolysisStatus.STOPPED, ChlorineTreatment.STABILIZED_TABLETS)
+    state = service.record_stabilized_tablets(2, 200.0, "galets 200 g")
+    state = service.record_cyanuric_acid_measurement(55.0)
+
+    assert state.treatment.electrolysis_status is ElectrolysisStatus.STOPPED
+    assert state.stabilized_tablets[-1].count == 2
+    assert state.cyanuric_acid_measurements[-1].cya_ppm == 55.0
+    assert any("CYA mesure a 55 ppm" in warning for warning in service.treatment_warnings(state))
+
+    service.prepare_naoh(50.0)
+    state = service.record_naoh_measurement(ph=5.0, tac_ppm=50.0)
+    warnings = state.naoh_doses[-1].coherence.warnings
+    assert any("prediction de pH est indicative" in warning for warning in warnings)
+    assert any("Electrolyse arretee" in warning for warning in warnings)
 
 
 def test_start_reuses_existing_active_protocol(tmp_path) -> None:

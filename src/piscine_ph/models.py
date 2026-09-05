@@ -26,6 +26,50 @@ class ProtocolStep(StrEnum):
     CANCELLED = "annule"
 
 
+class ElectrolysisStatus(StrEnum):
+    """État déclaré de l'électrolyse, distinct des mesures pH/TAC."""
+
+    UNKNOWN = "inconnu"
+    RUNNING = "en_marche"
+    STOPPED = "arretee"
+
+
+class ChlorineTreatment(StrEnum):
+    """Famille de désinfectant déclarée pour contextualiser le modèle pH/TAC."""
+
+    UNKNOWN = "inconnu"
+    STABILIZED_TABLETS = "galets_stabilises"
+    STABILIZED_DICHLOR = "dichlore_stabilise"
+    UNSTABILIZED = "chlore_non_stabilise"
+
+
+class TreatmentContext(BaseModel):
+    """Contexte de traitement qui rend la prédiction carbonate plus ou moins fiable.
+
+    Il est volontairement séparé de :class:`ProtocolConfig` : il peut évoluer
+    pendant un protocole sans modifier le volume ni les objectifs archivés.
+    """
+
+    electrolysis_status: ElectrolysisStatus = ElectrolysisStatus.UNKNOWN
+    chlorine_treatment: ChlorineTreatment = ChlorineTreatment.UNKNOWN
+
+
+class StabilizedTabletRecord(BaseModel):
+    """Trace un ajout de galets sans en déduire artificiellement le CYA."""
+
+    count: int = Field(gt=0)
+    unit_mass_g: float | None = Field(default=None, gt=0)
+    product_label: str = "galet stabilise"
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
+class CyanuricAcidMeasurement(BaseModel):
+    """Mesure déclarée de stabilisant (CYA), en mg/L ou ppm équivalents."""
+
+    cya_ppm: float = Field(ge=0)
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
 class ProtocolConfig(BaseModel):
     """Paramètres physiques et objectifs immuables d'un protocole.
 
@@ -158,12 +202,13 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 1
+    version: int = 2
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     archive_name: str
     config: ProtocolConfig
+    treatment: TreatmentContext = Field(default_factory=TreatmentContext)
     step: ProtocolStep = ProtocolStep.PH_TO_INTERMEDIATE
     current_ph: float
     current_tac_ppm: float
@@ -172,6 +217,8 @@ class ProtocolState(BaseModel):
     pending_bicarbonate: PendingBicarbonatePlan | None = None
     naoh_doses: list[NaOHDoseRecord] = Field(default_factory=list)
     bicarbonate_doses: list[BicarbonateRecord] = Field(default_factory=list)
+    stabilized_tablets: list[StabilizedTabletRecord] = Field(default_factory=list)
+    cyanuric_acid_measurements: list[CyanuricAcidMeasurement] = Field(default_factory=list)
     cumulative_additions: CumulativeAdditions = Field(default_factory=CumulativeAdditions)
     journal: list[JournalEvent] = Field(default_factory=list)
 

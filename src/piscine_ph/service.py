@@ -12,12 +12,18 @@ from datetime import datetime
 from .chemistry import BucketPreparation, ChemistryCalculator
 from .models import (
     BicarbonateRecord,
+    ChlorineTreatment,
+    CoherenceCheck,
+    CyanuricAcidMeasurement,
+    ElectrolysisStatus,
     NaOHDoseRecord,
     PendingBicarbonatePlan,
     PendingNaOHDose,
     ProtocolConfig,
     ProtocolState,
     ProtocolStep,
+    StabilizedTabletRecord,
+    TreatmentContext,
 )
 from .repository import JsonProtocolRepository
 
@@ -52,6 +58,101 @@ class ProtocolService:
         )
 
     @staticmethod
+    def treatment_warnings(state: ProtocolState) -> list[str]:
+        """Retourne les limites du modèle liées au traitement déclaré.
+
+        Les bilans stœchiométriques NaOH/NaHCO3 demeurent utilisables. En
+        revanche, les galets stabilisés ajoutent de l'acidité et du cyanurate,
+        deux phénomènes absents du modèle carbonate fermé.
+        """
+        treatment = state.treatment
+        warnings: list[str] = []
+        if treatment.chlorine_treatment in {
+            ChlorineTreatment.STABILIZED_TABLETS,
+            ChlorineTreatment.STABILIZED_DICHLOR,
+        }:
+            warnings.append(
+                "Chlore stabilise declare : le CYA et son alcalinite ne sont pas modelises ; "
+                "la prediction de pH est indicative."
+            )
+        if treatment.electrolysis_status is ElectrolysisStatus.STOPPED:
+            warnings.append(
+                "Electrolyse arretee : la hausse habituelle de pH liee a la cellule n'est plus attendue."
+            )
+        if (
+            treatment.electrolysis_status is ElectrolysisStatus.STOPPED
+            and treatment.chlorine_treatment is ChlorineTreatment.STABILIZED_TABLETS
+        ):
+            warnings.append(
+                "Galets stabilises avec electrolyse arretee : suivre pH et TAC sur mesure ; "
+                "les galets peuvent acidifier l'eau et faire baisser le TAC."
+            )
+        if state.cyanuric_acid_measurements:
+            cya = state.cyanuric_acid_measurements[-1].cya_ppm
+            if cya >= 75:
+                warnings.append(
+                    f"CYA mesure a {cya:.0f} ppm : ne plus ajouter de chlore stabilise ; "
+                    "evaluer un renouvellement partiel d'eau."
+                )
+            elif cya >= 50:
+                warnings.append(
+                    f"CYA mesure a {cya:.0f} ppm : surveiller l'accumulation avant de poursuivre "
+                    "les galets stabilises."
+                )
+        return warnings
+
+    def enrich_check_with_treatment(
+        self, state: ProtocolState, check: CoherenceCheck
+    ) -> CoherenceCheck:
+        """Ajoute au contrôle les avertissements de contexte, sans fausser le bilan TAC."""
+        for warning in self.treatment_warnings(state):
+            if warning not in check.warnings:
+                check.warnings.append(warning)
+        return check
+
+    def set_treatment(
+        self, electrolysis_status: ElectrolysisStatus, chlorine_treatment: ChlorineTreatment
+    ) -> ProtocolState:
+        """Enregistre le mode de désinfection actuellement appliqué au bassin."""
+        state = self.active()
+        state.treatment = TreatmentContext(
+            electrolysis_status=electrolysis_status,
+            chlorine_treatment=chlorine_treatment,
+        )
+        state.add_event(
+            "Contexte traitement : "
+            f"electrolyse {electrolysis_status.value}, chlore {chlorine_treatment.value}"
+        )
+        self.repository.save(state)
+        return state
+
+    def record_stabilized_tablets(
+        self, count: int, unit_mass_g: float | None, product_label: str
+    ) -> ProtocolState:
+        """Journalise des galets stabilisés réellement mis dans le doseur."""
+        state = self.active()
+        if state.treatment.chlorine_treatment is not ChlorineTreatment.STABILIZED_TABLETS:
+            raise ValueError(
+                "Declarez d'abord --chlorine galets_stabilises avec la commande treatment."
+            )
+        record = StabilizedTabletRecord(
+            count=count, unit_mass_g=unit_mass_g, product_label=product_label
+        )
+        state.stabilized_tablets.append(record)
+        mass = f" de {unit_mass_g:.0f} g" if unit_mass_g is not None else ""
+        state.add_event(f"Galets stabilises ajoutes : {count}{mass} ({product_label})")
+        self.repository.save(state)
+        return state
+
+    def record_cyanuric_acid_measurement(self, cya_ppm: float) -> ProtocolState:
+        """Journalise une mesure réelle de CYA, sans l'inférer des galets."""
+        state = self.active()
+        state.cyanuric_acid_measurements.append(CyanuricAcidMeasurement(cya_ppm=cya_ppm))
+        state.add_event(f"CYA mesure : {cya_ppm:.0f} ppm")
+        self.repository.save(state)
+        return state
+
+    @staticmethod
     def validate_tac_measurement(state: ProtocolState, tac_ppm: float) -> None:
         """Refuse un TAC plus précis que la résolution déclarée du test utilisateur."""
         step = state.config.tac_measurement_step_ppm
@@ -77,12 +178,15 @@ class ProtocolService:
             current_ph=config.initial_ph,
             current_tac_ppm=config.initial_tac_ppm,
         )
-        state.initial_coherence = self.chemistry.verify(
-            config,
-            ph_before=config.initial_ph,
-            tac_before_ppm=config.initial_tac_ppm,
-            ph_after=config.initial_ph,
-            tac_after_ppm=config.initial_tac_ppm,
+        state.initial_coherence = self.enrich_check_with_treatment(
+            state,
+            self.chemistry.verify(
+                config,
+                ph_before=config.initial_ph,
+                tac_before_ppm=config.initial_tac_ppm,
+                ph_after=config.initial_ph,
+                tac_after_ppm=config.initial_tac_ppm,
+            ),
         )
         state.add_event("Protocole cree et mesures initiales controlees")
         self.repository.save(state)
@@ -131,13 +235,16 @@ class ProtocolService:
         pending = state.pending_naoh
         if pending is None:
             raise ValueError("Aucune dose de NaOH en attente.")
-        check = self.chemistry.verify(
-            state.config,
-            ph_before=pending.ph_before,
-            tac_before_ppm=pending.tac_before_ppm,
-            ph_after=ph,
-            tac_after_ppm=tac_ppm,
-            naoh_ml=pending.naoh_ml,
+        check = self.enrich_check_with_treatment(
+            state,
+            self.chemistry.verify(
+                state.config,
+                ph_before=pending.ph_before,
+                tac_before_ppm=pending.tac_before_ppm,
+                ph_after=ph,
+                tac_after_ppm=tac_ppm,
+                naoh_ml=pending.naoh_ml,
+            ),
         )
         state.naoh_doses.append(
             NaOHDoseRecord(
@@ -213,13 +320,16 @@ class ProtocolService:
             record = latest_bicarbonate
             record.ph_after = ph
             record.tac_after_ppm = tac_ppm
-            record.coherence = self.chemistry.verify(
-                state.config,
-                ph_before=record.ph_before,
-                tac_before_ppm=record.tac_before_ppm,
-                ph_after=ph,
-                tac_after_ppm=tac_ppm,
-                bicarbonate_kg=record.bicarbonate_kg,
+            record.coherence = self.enrich_check_with_treatment(
+                state,
+                self.chemistry.verify(
+                    state.config,
+                    ph_before=record.ph_before,
+                    tac_before_ppm=record.tac_before_ppm,
+                    ph_after=ph,
+                    tac_after_ppm=tac_ppm,
+                    bicarbonate_kg=record.bicarbonate_kg,
+                ),
             )
             state.step = (
                 ProtocolStep.PH_TO_TARGET
@@ -232,13 +342,16 @@ class ProtocolService:
             record = latest_naoh
             record.ph_after = ph
             record.tac_after_ppm = tac_ppm
-            record.coherence = self.chemistry.verify(
-                state.config,
-                ph_before=record.ph_before,
-                tac_before_ppm=record.tac_before_ppm,
-                ph_after=ph,
-                tac_after_ppm=tac_ppm,
-                naoh_ml=record.naoh_ml,
+            record.coherence = self.enrich_check_with_treatment(
+                state,
+                self.chemistry.verify(
+                    state.config,
+                    ph_before=record.ph_before,
+                    tac_before_ppm=record.tac_before_ppm,
+                    ph_after=ph,
+                    tac_after_ppm=tac_ppm,
+                    naoh_ml=record.naoh_ml,
+                ),
             )
             if record.phase == "intermediate":
                 state.step = (
@@ -291,13 +404,16 @@ class ProtocolService:
         pending = state.pending_bicarbonate
         if pending is None:
             raise ValueError("Aucun apport de bicarbonate en attente.")
-        check = self.chemistry.verify(
-            state.config,
-            ph_before=pending.ph_before,
-            tac_before_ppm=pending.tac_before_ppm,
-            ph_after=ph,
-            tac_after_ppm=tac_ppm,
-            bicarbonate_kg=pending.bicarbonate_kg,
+        check = self.enrich_check_with_treatment(
+            state,
+            self.chemistry.verify(
+                state.config,
+                ph_before=pending.ph_before,
+                tac_before_ppm=pending.tac_before_ppm,
+                ph_after=ph,
+                tac_after_ppm=tac_ppm,
+                bicarbonate_kg=pending.bicarbonate_kg,
+            ),
         )
         state.bicarbonate_doses.append(
             BicarbonateRecord(
