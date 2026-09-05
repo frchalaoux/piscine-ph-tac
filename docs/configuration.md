@@ -28,6 +28,8 @@ Il est prévu pour modifier les réglages par défaut d'un nouveau protocole, pa
 
 Les suggestions NaOH restent indicatives : elles ne sont pas un calcul de la quantité nécessaire. Une modification de ce fichier doit être revue, testée avec `uv run pytest`, puis appliquée seulement à un nouveau protocole.
 
+Au démarrage guidé, l'utilisateur confirme la concentration du produit réellement employé ; cette valeur prioritaire est archivée dans `config`, avec son origine (`g_par_litre`, `pourcentage_massique` ou `pourcentage_volumique`). Le questionnaire convertit `% m/m` avec la densité déclarée et `% m/v` directement. Ne pas déduire cette concentration du poids brut d'un bidon.
+
 Les masses molaires, constantes carbonate, tolérances de cohérence et limites de sécurité du seau ne sont volontairement pas dans ce JSON. Elles sont documentées dans `src/piscine_ph/chemistry.py`, car les modifier sans révision scientifique changerait le modèle ou les protections du programme.
 
 La [référence des fichiers JSON](fichiers-json.md) décrit le format de `defaults.json` et celui des archives enregistrées dans `data/protocoles/`.

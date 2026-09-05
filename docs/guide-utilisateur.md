@@ -194,19 +194,47 @@ Pour utiliser les valeurs prévues pour le bassin de 46 m3 :
 uv run piscine-ph start
 ```
 
-Les valeurs par défaut sont : pH 4,1, palier pH 6,0, pH cible 7,2, TAC 50 ppm et seau 10 L.
+Pour tout **nouveau** protocole, cette commande ouvre un questionnaire. Il demande et archive : volume, pH et TAC réellement mesurés, paliers pH, concentration de soude, traitement de désinfection et, si utile, le CYA. Valider une valeur proposée n'est approprié que si elle correspond bien au bassin et au produit du jour.
+
+Pour la soude, le questionnaire ne demande jamais le poids total du bidon : ce poids est inutilisable sans tare et volume. Il guide selon l'étiquette ou la FDS :
+
+- concentration indiquée directement en `g/L` ;
+- `% m/m` et densité en `g/mL` : `g/L = % × densité × 10` ; par exemple 30 % m/m à 1,33 g/mL donne 399 g/L ;
+- `% m/v` : `g/L = % × 10` ; par exemple 30 % m/v donne 300 g/L.
+
+La concentration ne possède pas de réponse par défaut dans le questionnaire : elle doit être saisie depuis l'étiquette ou la FDS. Les réponses sont figées dans l'archive, notamment `config.naoh_concentration_g_l` et son origine. Cela évite de confondre une soude à 30 % massique avec une solution à 300 g/L.
+
+### Corriger la soude d'un protocole déjà commencé
+
+Ne lancez ni `start --force`, ni un nouveau protocole pour cela : les mesures et apports précédents seraient séparés de leur historique. Vérifiez d'abord l'état avec :
+
+```bash
+uv run piscine-ph status
+```
+
+S'il existe une **dose de NaOH en attente**, confirmez-la avec sa mesure si elle a été versée, ou annulez-la seulement si elle n'a pas été versée. Ensuite, pour le même bidon employé depuis le début, lancez :
+
+```bash
+uv run piscine-ph configure-naoh
+```
+
+Le questionnaire de cette commande demande de nouveau l'unité. Pour la lessive de soude du FDS étudié ici, choisir `% m/m`, saisir `30` puis la densité `1,33` : l'application archive et emploie `399 g/L` (soit environ `400 g/L`). Les volumes déjà versés et les mesures restent intacts ; le cumul en moles de NaOH et les contrôles théoriques sont recalculés avec cette concentration, et la modification est inscrite dans le journal JSON.
+
+N'utilisez pas cette commande si les premiers apports ont été faits avec un produit différent : elle suppose une même concentration pour tous les apports confirmés. Conservez alors l'archive telle quelle et commencez un nouveau protocole pour le nouveau produit.
+
+Un lot de bicarbonate en attente n'empêche pas cette correction, car le bicarbonate est calculé à partir du TAC mesuré, pas de la concentration de soude.
 
 Le test TAC utilisé ici se lit par paliers de 10 ppm. Saisir uniquement des valeurs comme 40, 50, 60, 70 ou 80 ppm ; l'application refuse une fausse précision telle que 52 ppm.
 
-Pour fournir vos propres mesures :
+Pour une exécution automatisée ou sans questionnaire, utiliser `--no-guided` et fournir explicitement les paramètres, en particulier la concentration de soude :
 
 ```bash
-uv run piscine-ph start --volume-m3 46 --initial-ph 4.1 --initial-tac 50 --bucket-l 10
+uv run piscine-ph start --no-guided --volume-m3 46 --initial-ph 4.0 --initial-tac 30 --bucket-l 10 --naoh-g-l 400
 ```
 
 Le programme crée un fichier de suivi daté dans `data/protocoles/`. Il conserve les mesures et reprend automatiquement le dernier protocole non terminé.
 
-Dès la création, il affiche et archive un **approvisionnement indicatif** : stock prudent de soude à 300 g/L et quantité de bicarbonate calculée depuis le TAC initial, avec une marge d'achat. Ce n'est pas une instruction de verser ces quantités : chaque apport reste soumis aux mesures pH/TAC intermédiaires. La même information est visible ensuite avec `uv run piscine-ph status`.
+Dès la création, il affiche et archive un **approvisionnement indicatif** : stock prudent de soude à la concentration confirmée dans le questionnaire et quantité de bicarbonate calculée depuis le TAC initial, avec une marge d'achat. Ce n'est pas une instruction de verser ces quantités : chaque apport reste soumis aux mesures pH/TAC intermédiaires. La même information est visible ensuite avec `uv run piscine-ph status`.
 
 ### Cas particulier : électrolyse arrêtée et galets stabilisés
 

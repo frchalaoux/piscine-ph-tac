@@ -57,12 +57,14 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
-| `config` | objet | Photographie immuable des paramètres de bassin utilisés au démarrage. |
+| `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
 | `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `termine` ou `annule`. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
 
-`config` contient les mêmes champs que `defaults.json.protocol`, mais ne doit pas être modifié : changer le volume ou l’objectif d’une archive compromettrait la traçabilité des doses déjà enregistrées.
+`config` contient les mêmes champs que `defaults.json.protocol`. Ne modifiez pas directement le JSON : changer le volume ou l’objectif compromettrait la traçabilité des doses. La seule correction prévue par l'application est `configure-naoh`, qui met à jour de manière journalisée la concentration d'un même produit et recalcule le cumul des apports NaOH déjà confirmés.
+
+Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_concentration_source`, `naoh_label_percent` et, pour un pourcentage massique, `naoh_density_g_ml`. Ces éléments documentent comment `naoh_concentration_g_l` a été obtenu ; ils sont particulièrement importants car `% m/m` et `% m/v` ne donnent pas la même concentration en g/L.
 
 ### Contexte de désinfection
 
