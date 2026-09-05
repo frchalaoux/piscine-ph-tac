@@ -3,10 +3,10 @@
   "schema_version": 1,
   "protocol": {
     "pool_volume_m3": 46.0,
-    "initial_ph": 4.1,
+    "initial_ph": 4.0,
     "intermediate_ph": 6.0,
     "target_ph": 7.2,
-    "initial_tac_ppm": 50.0,
+    "initial_tac_ppm": 30.0,
     "target_tac_ppm": 80.0,
     "tac_measurement_step_ppm": 10.0,
     "bucket_volume_l": 10.0,
