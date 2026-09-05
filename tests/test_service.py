@@ -72,6 +72,32 @@ def test_supply_estimate_is_persisted_and_accounts_for_stabilized_tablets(tmp_pa
     assert state.supply_estimate.includes_stabilized_chlorine_margin is True
 
 
+def test_bicarbonate_is_prepared_and_recalculated_one_kg_at_a_time(tmp_path) -> None:
+    repository = JsonProtocolRepository(tmp_path)
+    service = ProtocolService(repository)
+    state = service.start(ProtocolConfig())
+    state.step = ProtocolStep.TAC_TO_TARGET
+    state.current_ph = 6.0
+    state.current_tac_ppm = 30.0
+    repository.save(state)
+
+    state = service.plan_bicarbonate(30.0)
+    first_lot = state.pending_bicarbonate
+    assert first_lot is not None
+    assert first_lot.bicarbonate_kg == 1.0
+    assert first_lot.bicarbonate_total_kg == pytest.approx(3.86, abs=0.01)
+
+    state = service.record_bicarbonate_measurement(ph=6.1, tac_ppm=40.0)
+    assert state.step is ProtocolStep.TAC_TO_TARGET
+    assert state.bicarbonate_doses[-1].bicarbonate_kg == 1.0
+
+    state = service.plan_bicarbonate(40.0)
+    next_lot = state.pending_bicarbonate
+    assert next_lot is not None
+    assert next_lot.bicarbonate_kg == 1.0
+    assert next_lot.bicarbonate_total_kg == pytest.approx(3.09, abs=0.01)
+
+
 def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     created = service.start(ProtocolConfig())

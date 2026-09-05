@@ -334,7 +334,7 @@ Lorsque pH 6 est atteint, mesurer le TAC et demander le calcul de bicarbonate :
 uv run piscine-ph plan-tac --tac 50
 ```
 
-Le programme indique la masse totale et les apports de 0,50 kg maximum. Ajouter le bicarbonate en poudre près des buses avec filtration, selon les consignes du produit.
+Le programme indique le besoin total théorique, mais prépare **un seul lot de 1 kg maximum**. Ajouter uniquement ce lot en poudre près des buses, filtration en marche, selon les consignes du produit. Attendre au minimum **4 heures** de circulation avant de mesurer pH et TAC — davantage si le cycle complet de filtration de votre bassin est plus long. Ne pas ajouter un second lot avant cette mesure. Une fiche produit bicarbonate comparable indique elle aussi environ quatre heures pour une circulation complète. [Leslie’s Alkalinity Up](https://lesliespool.com/leslies-alkalinity-up-2-lbs/48051.html)
 
 Après dissolution et circulation, mesurer à nouveau pH et TAC puis saisir :
 
@@ -342,7 +342,7 @@ Après dissolution et circulation, mesurer à nouveau pH et TAC puis saisir :
 uv run piscine-ph measure-tac --ph 6.15 --tac 80
 ```
 
-Si le TAC est inférieur à 80 ppm, recommencer `plan-tac` avec la nouvelle mesure. Le programme ne passe pas à l'étape finale avant confirmation d'un TAC d'au moins 80 ppm.
+Si le TAC est inférieur à 80 ppm, recommencer `plan-tac` avec la nouvelle mesure : le programme recalcule alors le besoin restant et prépare au plus 1 kg supplémentaire. Le programme ne passe pas à l'étape finale avant confirmation d'un TAC d'au moins 80 ppm.
 
 ## Étape 3 — Atteindre pH 7,2
 

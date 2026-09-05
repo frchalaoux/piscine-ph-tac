@@ -325,6 +325,17 @@ class ProtocolService:
         self.repository.save(state)
         return state
 
+    def cancel_pending_bicarbonate(self) -> ProtocolState:
+        """Annule un lot de bicarbonate préparé uniquement s'il n'a pas été ajouté."""
+        state = self.active()
+        pending = state.pending_bicarbonate
+        if pending is None:
+            raise ValueError("Aucun lot de bicarbonate en attente a annuler.")
+        state.pending_bicarbonate = None
+        state.add_event(f"Lot bicarbonate annule avant ajout : {pending.bicarbonate_kg:.2f} kg")
+        self.repository.save(state)
+        return state
+
     def cancel_protocol(self) -> ProtocolState:
         """Archive le protocole actif comme annulé, sans effacer son journal.
 
@@ -428,14 +439,18 @@ class ProtocolService:
             raise ValueError("Le bicarbonate n'est pas l'etape active du protocole.")
         if state.pending_bicarbonate:
             raise ValueError("Un apport de bicarbonate est deja en attente de mesure.")
-        kg = self.chemistry.bicarbonate_kg(state.config, measured_tac_ppm)
+        total_kg = self.chemistry.bicarbonate_kg(state.config, measured_tac_ppm)
+        kg = min(total_kg, SETTINGS.workflow.bicarbonate_batch_max_kg)
         state.current_tac_ppm = measured_tac_ppm
         state.pending_bicarbonate = PendingBicarbonatePlan(
             ph_before=state.current_ph,
             tac_before_ppm=measured_tac_ppm,
             bicarbonate_kg=kg,
+            bicarbonate_total_kg=total_kg,
         )
-        state.add_event(f"Apport bicarbonate prepare : {kg:.2f} kg")
+        state.add_event(
+            f"Lot bicarbonate prepare : {kg:.2f} kg (besoin calcule : {total_kg:.2f} kg)"
+        )
         self.repository.save(state)
         return state
 

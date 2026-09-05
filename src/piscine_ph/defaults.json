@@ -18,7 +18,8 @@
     "naoh_large_dose_ml": 250.0,
     "naoh_medium_dose_ml": 100.0,
     "naoh_small_dose_ml": 50.0,
-    "bicarbonate_batch_max_kg": 0.5
+    "bicarbonate_batch_max_kg": 1.0,
+    "bicarbonate_wait_min_minutes": 240
   },
   "supply_planning": {
     "naoh_purchase_recommended_l": 2.0,

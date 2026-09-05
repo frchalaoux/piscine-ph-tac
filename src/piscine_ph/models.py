@@ -162,11 +162,12 @@ class NaOHDoseRecord(BaseModel):
 
 
 class PendingBicarbonatePlan(BaseModel):
-    """Apport de bicarbonate calculé, en attente de la mesure de confirmation."""
+    """Lot de bicarbonate calculé, en attente de sa mesure de confirmation."""
 
     ph_before: float
     tac_before_ppm: float
     bicarbonate_kg: float = Field(ge=0)
+    bicarbonate_total_kg: float | None = Field(default=None, ge=0)
     created_at: datetime = Field(default_factory=datetime.now)
 
 

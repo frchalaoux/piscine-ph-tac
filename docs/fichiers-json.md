@@ -37,7 +37,8 @@ Ce fichier est validé au démarrage. Modifier une valeur n’affecte jamais les
 | `protocol.bucket_volume_l` | L | Volume nominal du seau. |
 | `protocol.naoh_concentration_g_l` | g/L | Concentration de la soude utilisée dans les bilans. |
 | `workflow.naoh_*` | pH ou mL | Seuils et portions indicatives de soude. Ils ne prédisent pas la demande réelle du bassin. |
-| `workflow.bicarbonate_batch_max_kg` | kg | Taille maximale d’un apport de bicarbonate proposé. |
+| `workflow.bicarbonate_batch_max_kg` | kg | Taille maximale d’un seul lot de bicarbonate proposé. |
+| `workflow.bicarbonate_wait_min_minutes` | min | Attente minimale de filtration avant sa mesure de confirmation. |
 | `supply_planning.naoh_purchase_recommended_l` | L | Stock prudent de soude à acheter, non assimilable à une dose. |
 | `supply_planning.bicarbonate_purchase_margin_kg` | kg | Marge ajoutée au besoin théorique en bicarbonate. |
 | `supply_planning.stabilized_chlorine_extra_bicarbonate_margin_kg` | kg | Marge supplémentaire lorsque les galets stabilisés sont déclarés. |
@@ -108,11 +109,11 @@ Les champs `pending_*` sont essentiels : une dose seulement préparée n’est p
 | Champ | Présence | Contenu |
 | --- | --- | --- |
 | `pending_naoh` | objet ou `null` | Soude préparée, en attente de `measure`. Champs : `phase`, pH/TAC avant, `naoh_ml`, `water_l`, date. |
-| `pending_bicarbonate` | objet ou `null` | Bicarbonate planifié, en attente de `measure-tac`. Champs : pH/TAC avant, `bicarbonate_kg`, date. |
+| `pending_bicarbonate` | objet ou `null` | Un seul lot de bicarbonate planifié, en attente de `measure-tac`. Champs : pH/TAC avant, `bicarbonate_kg` (lot), `bicarbonate_total_kg` (besoin calculé avant fractionnement), date. |
 | `naoh_doses` | liste | Doses de soude confirmées par une mesure après ajout. Chaque entrée ajoute `ph_after`, `tac_after_ppm`, `coherence`, `recorded_at`. |
 | `bicarbonate_doses` | liste | Apports de bicarbonate confirmés, avec les mêmes mesures après ajout. |
 
-Une dose en attente est supprimée par `cancel-dose` uniquement si elle n’a pas été versée. Dès que `measure` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul.
+Une dose en attente est supprimée par `cancel-dose` (soude) ou `cancel-tac-plan` (bicarbonate) uniquement si elle n’a pas été versée. Dès que `measure` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul. Après chaque lot de bicarbonate, une nouvelle mesure et un nouveau `plan-tac` sont nécessaires avant de préparer le lot suivant.
 
 ### Contrôle de cohérence
 

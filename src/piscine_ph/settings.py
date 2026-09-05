@@ -45,6 +45,9 @@ class WorkflowDefaults(BaseModel):
     bicarbonate_batch_max_kg: float = Field(
         gt=0, description="Masse maximale d'un apport de bicarbonate en kg."
     )
+    bicarbonate_wait_min_minutes: int = Field(
+        gt=0, description="Attente minimale de circulation avant le contrôle TAC."
+    )
 
     @model_validator(mode="after")
     def validate_naoh_thresholds(self) -> WorkflowDefaults:

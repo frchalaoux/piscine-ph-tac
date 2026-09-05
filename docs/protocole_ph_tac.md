@@ -120,15 +120,15 @@ Lorsque le palier pH 6 est atteint, mesurer le TAC réel puis calculer l'apport 
 uv run piscine-ph plan-tac --tac 50
 ```
 
-Le programme calcule la masse de NaHCO3 nécessaire et la découpe en apports de 0,50 kg maximum. Pour 46 m3, de 50 à 80 ppm, l'apport théorique est d'environ **2,32 kg**.
+Le programme calcule la masse de NaHCO3 nécessaire, mais ne prépare qu'un **lot de 1 kg maximum**. Pour 46 m3, de 50 à 80 ppm, le besoin théorique initial est d'environ **2,32 kg** ; cette valeur n’autorise pas à verser les 2,32 kg sans contrôle.
 
-Ajouter le bicarbonate en poudre devant les buses, avec filtration, selon l'étiquette du produit. Laisser dissoudre et circuler, puis mesurer pH et TAC :
+Ajouter uniquement le lot affiché en poudre devant les buses, avec filtration, selon l'étiquette du produit. Attendre au minimum **4 heures** de circulation avant de mesurer pH et TAC :
 
 ```bash
 uv run piscine-ph measure-tac --ph 6.15 --tac 80
 ```
 
-Si le TAC mesuré est sous 80 ppm, le programme reste à l'étape TAC. Refaire `plan-tac` avec la nouvelle mesure, ajouter l'apport complémentaire, puis refaire `measure-tac`.
+Si le TAC mesuré est sous 80 ppm, le programme reste à l'étape TAC. Refaire `plan-tac` avec la nouvelle mesure : il recalcule le besoin restant et prépare un nouveau lot de 1 kg maximum. Ne jamais confirmer un lot partiellement versé comme s'il avait été versé en totalité.
 
 Le passage à l'ajustement final n'est autorisé que lorsque le TAC saisi est supérieur ou égal à 80 ppm.
 

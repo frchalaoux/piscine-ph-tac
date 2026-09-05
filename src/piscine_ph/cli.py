@@ -16,6 +16,7 @@ from .chemistry import ChemistryCalculator
 from .models import (
     ChlorineTreatment,
     ElectrolysisStatus,
+    PendingBicarbonatePlan,
     ProtocolConfig,
     ProtocolState,
     ProtocolStep,
@@ -145,6 +146,22 @@ def show_bucket_preparation(naoh_ml: float, water_l: float, useful_volume_l: flo
     typer.echo(f"Volume utile : {useful_volume_l:.2f} L. Mesurer ensuite pH et TAC du bassin.")
 
 
+def show_bicarbonate_plan(pending: PendingBicarbonatePlan) -> None:
+    """Présente un seul lot TAC et l'attente obligatoire avant sa confirmation."""
+    total_kg = pending.bicarbonate_total_kg or pending.bicarbonate_kg
+    wait_minutes = SETTINGS.workflow.bicarbonate_wait_min_minutes
+    wait_text = f"{wait_minutes // 60} h" if wait_minutes % 60 == 0 else f"{wait_minutes} min"
+    typer.secho(
+        f"Bicarbonate requis depuis cette mesure : {total_kg:.2f} kg", fg=typer.colors.GREEN
+    )
+    typer.echo(f"Lot a ajouter maintenant : {pending.bicarbonate_kg:.2f} kg maximum.")
+    typer.secho(
+        f"Filtration en marche : attendre au minimum {wait_text} avant de mesurer pH et TAC.",
+        fg=typer.colors.YELLOW,
+    )
+    typer.echo("Ne pas ajouter le lot suivant avant cette mesure et le nouveau calcul.")
+
+
 @app.command()
 def start(
     volume_m3: float = typer.Option(SETTINGS.protocol.pool_volume_m3, min=0.01),
@@ -216,7 +233,9 @@ def status() -> None:
     if state.pending_naoh:
         typer.echo(f"Dose NaOH en attente : {state.pending_naoh.naoh_ml:.0f} mL")
     if state.pending_bicarbonate:
-        typer.echo(f"Bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg")
+        typer.echo(
+            f"Lot bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg"
+        )
     show_cumulative_additions(state)
     show_treatment(state)
     show_supply_estimate(state)
@@ -314,6 +333,27 @@ def cancel_dose() -> None:
     show_next_command(state)
 
 
+@app.command("cancel-tac-plan")
+def cancel_tac_plan() -> None:
+    """Annule un lot de bicarbonate préparé et non versé après confirmation."""
+    try:
+        state = service().active()
+        pending = state.pending_bicarbonate
+        if pending is None:
+            raise ValueError("Aucun lot de bicarbonate en attente a annuler.")
+        if not typer.confirm(
+            f"Confirmer que les {pending.bicarbonate_kg:.2f} kg n'ont PAS ete verses dans le bassin ?"
+        ):
+            typer.echo("Annulation abandonnee.")
+            return
+        state = service().cancel_pending_bicarbonate()
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Lot de bicarbonate annule.", fg=typer.colors.GREEN)
+    show_next_command(state)
+
+
 @app.command("cancel-protocol")
 def cancel_protocol() -> None:
     """Archive le protocole actif comme annulé, sans supprimer les données."""
@@ -370,7 +410,7 @@ def measure(
 
 @app.command("plan-tac")
 def plan_tac(tac: Annotated[float, typer.Option(min=0.01)]) -> None:
-    """Calcule et découpe l'apport de bicarbonate depuis le TAC réellement mesuré."""
+    """Prépare un seul lot de bicarbonate depuis le TAC réellement mesuré."""
     try:
         state = service().plan_bicarbonate(tac)
     except ValueError as error:
@@ -378,11 +418,7 @@ def plan_tac(tac: Annotated[float, typer.Option(min=0.01)]) -> None:
         raise typer.Exit(1)
     pending = state.pending_bicarbonate
     assert pending is not None
-    batches = ChemistryCalculator().bicarbonate_batches_kg(pending.bicarbonate_kg)
-    typer.secho(f"Bicarbonate total : {pending.bicarbonate_kg:.2f} kg", fg=typer.colors.GREEN)
-    typer.echo(
-        "Apports en poudre devant les buses : " + ", ".join(f"{value:.2f} kg" for value in batches)
-    )
+    show_bicarbonate_plan(pending)
     show_next_command(state)
 
 
@@ -402,7 +438,8 @@ def measure_tac(
     show_cumulative_additions(state)
     if state.step.value == "tac_vers_80":
         typer.secho(
-            "TAC sous 80 ppm : refaire plan-tac avec la nouvelle mesure.", fg=typer.colors.YELLOW
+            "TAC sous 80 ppm : refaire plan-tac avec la nouvelle mesure pour preparer un seul lot.",
+            fg=typer.colors.YELLOW,
         )
     show_next_command(state)
 
@@ -445,7 +482,10 @@ def menu() -> None:
         return
 
     if state.pending_bicarbonate:
-        typer.echo("Le bicarbonate affiche precedemment doit etre ajoute puis mesure.")
+        typer.echo(
+            "Ajouter uniquement le lot de bicarbonate affiche, puis attendre avant de mesurer."
+        )
+        show_bicarbonate_plan(state.pending_bicarbonate)
         show_next_command(state)
         if not typer.confirm("Avez-vous deja mesure le pH et le TAC apres bicarbonate ?"):
             return
@@ -463,9 +503,7 @@ def menu() -> None:
         state = protocol_service.plan_bicarbonate(tac)
         pending = state.pending_bicarbonate
         assert pending is not None
-        batches = ChemistryCalculator().bicarbonate_batches_kg(pending.bicarbonate_kg)
-        typer.secho(f"Bicarbonate total : {pending.bicarbonate_kg:.2f} kg", fg=typer.colors.GREEN)
-        typer.echo("Apports : " + ", ".join(f"{value:.2f} kg" for value in batches))
+        show_bicarbonate_plan(pending)
         show_next_command(state)
         return
 

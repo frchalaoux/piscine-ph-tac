@@ -27,6 +27,7 @@ Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité
 uv run piscine-ph start
 uv run piscine-ph dose
 uv run piscine-ph cancel-dose
+uv run piscine-ph cancel-tac-plan
 uv run piscine-ph correct-last-measurement --ph 4.5 --tac 50
 uv run piscine-ph cancel-protocol
 uv run piscine-ph measure --ph 5.2 --tac 50
