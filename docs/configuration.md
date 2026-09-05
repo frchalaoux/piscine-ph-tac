@@ -21,7 +21,12 @@ Il est prévu pour modifier les réglages par défaut d'un nouveau protocole, pa
 | `workflow.naoh_medium_dose_ml` | mL | Repère de dose entre les deux seuils d'écart pH. |
 | `workflow.naoh_small_dose_ml` | mL | Repère de dose au plus au seuil `naoh_medium_gap_ph`. |
 | `workflow.bicarbonate_batch_max_kg` | kg | Masse maximale proposée pour un apport de bicarbonate. |
+| `supply_planning.naoh_purchase_recommended_l` | L | Stock prudent de soude proposé dans le plan d'approvisionnement ; ce n'est pas une dose. |
+| `supply_planning.bicarbonate_purchase_margin_kg` | kg | Marge ajoutée au besoin théorique de bicarbonate. |
+| `supply_planning.stabilized_chlorine_extra_bicarbonate_margin_kg` | kg | Marge supplémentaire si les galets stabilisés sont déclarés. |
 
 Les suggestions NaOH restent indicatives : elles ne sont pas un calcul de la quantité nécessaire. Une modification de ce fichier doit être revue, testée avec `uv run pytest`, puis appliquée seulement à un nouveau protocole.
 
 Les masses molaires, constantes carbonate, tolérances de cohérence et limites de sécurité du seau ne sont volontairement pas dans ce JSON. Elles sont documentées dans `src/piscine_ph/chemistry.py`, car les modifier sans révision scientifique changerait le modèle ou les protections du programme.
+
+La [référence des fichiers JSON](fichiers-json.md) décrit le format de `defaults.json` et celui des archives enregistrées dans `data/protocoles/`.

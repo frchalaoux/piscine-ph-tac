@@ -70,6 +70,16 @@ class CyanuricAcidMeasurement(BaseModel):
     recorded_at: datetime = Field(default_factory=datetime.now)
 
 
+class SupplyEstimate(BaseModel):
+    """Repère d'achat généré au démarrage, distinct des doses opérationnelles."""
+
+    naoh_solution_recommended_l: float = Field(gt=0)
+    bicarbonate_theoretical_kg: float = Field(ge=0)
+    bicarbonate_recommended_kg: float = Field(ge=0)
+    basis_tac_ppm: float = Field(gt=0)
+    includes_stabilized_chlorine_margin: bool = False
+
+
 class ProtocolConfig(BaseModel):
     """Paramètres physiques et objectifs immuables d'un protocole.
 
@@ -209,6 +219,7 @@ class ProtocolState(BaseModel):
     archive_name: str
     config: ProtocolConfig
     treatment: TreatmentContext = Field(default_factory=TreatmentContext)
+    supply_estimate: SupplyEstimate | None = None
     step: ProtocolStep = ProtocolStep.PH_TO_INTERMEDIATE
     current_ph: float
     current_tac_ppm: float

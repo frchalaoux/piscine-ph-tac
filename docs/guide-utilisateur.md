@@ -206,13 +206,17 @@ uv run piscine-ph start --volume-m3 46 --initial-ph 4.1 --initial-tac 50 --bucke
 
 Le programme crée un fichier de suivi daté dans `data/protocoles/`. Il conserve les mesures et reprend automatiquement le dernier protocole non terminé.
 
+Dès la création, il affiche et archive un **approvisionnement indicatif** : stock prudent de soude à 300 g/L et quantité de bicarbonate calculée depuis le TAC initial, avec une marge d'achat. Ce n'est pas une instruction de verser ces quantités : chaque apport reste soumis aux mesures pH/TAC intermédiaires. La même information est visible ensuite avec `uv run piscine-ph status`.
+
 ### Cas particulier : électrolyse arrêtée et galets stabilisés
 
 Si la cellule est arrêtée pour maintenance et que la désinfection temporaire est assurée par des galets stabilisés, déclarer ce contexte dès le début :
 
 ```bash
-uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises
+uv run piscine-ph start --electrolysis arretee --chlorine galets_stabilises
 ```
+
+Si le protocole existe déjà, utiliser à la place `uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
 
 Le calcul théorique du TAC reste disponible, mais la prévision de pH devient indicative car les galets acidifient l'eau et apportent du CYA. Journaliser les galets et chaque mesure de stabilisant :
 

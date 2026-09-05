@@ -54,12 +54,21 @@ class WorkflowDefaults(BaseModel):
         return self
 
 
+class SupplyPlanningDefaults(BaseModel):
+    """Marges d'achat : elles ne constituent jamais des doses à verser."""
+
+    naoh_purchase_recommended_l: float = Field(gt=0)
+    bicarbonate_purchase_margin_kg: float = Field(ge=0)
+    stabilized_chlorine_extra_bicarbonate_margin_kg: float = Field(ge=0)
+
+
 class ApplicationSettings(BaseModel):
     """Schéma validé du fichier JSON de paramètres opérationnels."""
 
     schema_version: int = Field(ge=1, description="Version du format defaults.json.")
     protocol: ProtocolDefaults
     workflow: WorkflowDefaults
+    supply_planning: SupplyPlanningDefaults
 
 
 @lru_cache

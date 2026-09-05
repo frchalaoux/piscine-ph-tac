@@ -19,5 +19,10 @@
     "naoh_medium_dose_ml": 100.0,
     "naoh_small_dose_ml": 50.0,
     "bicarbonate_batch_max_kg": 0.5
+  },
+  "supply_planning": {
+    "naoh_purchase_recommended_l": 2.0,
+    "bicarbonate_purchase_margin_kg": 1.0,
+    "stabilized_chlorine_extra_bicarbonate_margin_kg": 1.0
   }
 }

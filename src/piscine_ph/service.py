@@ -8,6 +8,7 @@ transitions restent testables et traçables.
 from __future__ import annotations
 
 from datetime import datetime
+from math import ceil
 
 from .chemistry import BucketPreparation, ChemistryCalculator
 from .models import (
@@ -23,9 +24,11 @@ from .models import (
     ProtocolState,
     ProtocolStep,
     StabilizedTabletRecord,
+    SupplyEstimate,
     TreatmentContext,
 )
 from .repository import JsonProtocolRepository
+from .settings import SETTINGS
 
 
 class ProtocolService:
@@ -43,6 +46,10 @@ class ProtocolService:
         state = self.repository.active()
         if state is None:
             raise ValueError("Aucun protocole actif. Lancez d'abord la commande start.")
+        if state.supply_estimate is None:
+            state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
+            state.add_event("Plan d'approvisionnement genere pour le protocole existant")
+            self.repository.save(state)
         return state
 
     def refresh_cumulative_additions(self, state: ProtocolState) -> None:
@@ -101,6 +108,28 @@ class ProtocolService:
                 )
         return warnings
 
+    def build_supply_estimate(
+        self, config: ProtocolConfig, treatment: TreatmentContext
+    ) -> SupplyEstimate:
+        """Construit un repère d'achat à partir du protocole, sans prédire le pH.
+
+        La soude est un stock prudent configurable : la consommation réelle ne
+        peut pas être déduite du seul pH de départ. Le bicarbonate est fondé sur
+        le bilan TAC initial, complété par une marge d'achat explicite.
+        """
+        theoretical_bicarbonate_kg = self.chemistry.bicarbonate_kg(config, config.initial_tac_ppm)
+        stabilized = treatment.chlorine_treatment is ChlorineTreatment.STABILIZED_TABLETS
+        margin_kg = SETTINGS.supply_planning.bicarbonate_purchase_margin_kg
+        if stabilized:
+            margin_kg += SETTINGS.supply_planning.stabilized_chlorine_extra_bicarbonate_margin_kg
+        return SupplyEstimate(
+            naoh_solution_recommended_l=SETTINGS.supply_planning.naoh_purchase_recommended_l,
+            bicarbonate_theoretical_kg=theoretical_bicarbonate_kg,
+            bicarbonate_recommended_kg=float(ceil(theoretical_bicarbonate_kg + margin_kg)),
+            basis_tac_ppm=config.initial_tac_ppm,
+            includes_stabilized_chlorine_margin=stabilized,
+        )
+
     def enrich_check_with_treatment(
         self, state: ProtocolState, check: CoherenceCheck
     ) -> CoherenceCheck:
@@ -119,6 +148,7 @@ class ProtocolService:
             electrolysis_status=electrolysis_status,
             chlorine_treatment=chlorine_treatment,
         )
+        state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
         state.add_event(
             "Contexte traitement : "
             f"electrolyse {electrolysis_status.value}, chlore {chlorine_treatment.value}"
@@ -161,7 +191,13 @@ class ProtocolService:
                 f"Le TAC doit etre saisi par pas de {step:.0f} ppm (ex. 50, 60, 70, 80)."
             )
 
-    def start(self, config: ProtocolConfig, *, replace_active: bool = False) -> ProtocolState:
+    def start(
+        self,
+        config: ProtocolConfig,
+        treatment: TreatmentContext | None = None,
+        *,
+        replace_active: bool = False,
+    ) -> ProtocolState:
         """Crée une archive ou reprend l'archive active existante.
 
         ``replace_active`` n'efface jamais l'archive active : il autorise
@@ -169,15 +205,21 @@ class ProtocolService:
         """
         active = self.repository.active()
         if active and not replace_active:
+            if active.supply_estimate is None:
+                active.supply_estimate = self.build_supply_estimate(active.config, active.treatment)
+                active.add_event("Plan d'approvisionnement genere pour le protocole existant")
+                self.repository.save(active)
             return active
         path = self.repository.create_path()
         state = ProtocolState(
             protocol_id=datetime.now().astimezone().isoformat(timespec="seconds"),
             archive_name=path.name,
             config=config,
+            treatment=treatment or TreatmentContext(),
             current_ph=config.initial_ph,
             current_tac_ppm=config.initial_tac_ppm,
         )
+        state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
         state.initial_coherence = self.enrich_check_with_treatment(
             state,
             self.chemistry.verify(
