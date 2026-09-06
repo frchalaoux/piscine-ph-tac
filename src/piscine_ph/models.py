@@ -43,6 +43,15 @@ class ChlorineTreatment(StrEnum):
     UNSTABILIZED = "chlore_non_stabilise"
 
 
+class NaOHConcentrationSource(StrEnum):
+    """Origine de la concentration de soude déclarée pour le protocole."""
+
+    DEFAULT = "valeur_par_defaut"
+    GRAMS_PER_LITRE = "g_par_litre"
+    MASS_PERCENT = "pourcentage_massique"
+    VOLUME_PERCENT = "pourcentage_volumique"
+
+
 class TreatmentContext(BaseModel):
     """Contexte de traitement qui rend la prédiction carbonate plus ou moins fiable.
 
@@ -100,6 +109,9 @@ class ProtocolConfig(BaseModel):
     )
     bucket_volume_l: float = Field(default=SETTINGS.protocol.bucket_volume_l, gt=0)
     naoh_concentration_g_l: float = Field(default=SETTINGS.protocol.naoh_concentration_g_l, gt=0)
+    naoh_concentration_source: NaOHConcentrationSource = NaOHConcentrationSource.DEFAULT
+    naoh_label_percent: float | None = Field(default=None, gt=0, le=100)
+    naoh_density_g_ml: float | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def validate_targets(self) -> ProtocolConfig:
@@ -114,6 +126,17 @@ class ProtocolConfig(BaseModel):
                 raise ValueError(
                     f"{label} doit etre un multiple de {self.tac_measurement_step_ppm:.0f} ppm."
                 )
+        if self.naoh_concentration_source is NaOHConcentrationSource.MASS_PERCENT and (
+            self.naoh_label_percent is None or self.naoh_density_g_ml is None
+        ):
+            raise ValueError(
+                "Une soude en pourcentage massique exige le pourcentage et la densite."
+            )
+        if (
+            self.naoh_concentration_source is NaOHConcentrationSource.VOLUME_PERCENT
+            and self.naoh_label_percent is None
+        ):
+            raise ValueError("Une soude en pourcentage volumique exige le pourcentage.")
         return self
 
 
@@ -162,11 +185,12 @@ class NaOHDoseRecord(BaseModel):
 
 
 class PendingBicarbonatePlan(BaseModel):
-    """Apport de bicarbonate calculé, en attente de la mesure de confirmation."""
+    """Lot de bicarbonate calculé, en attente de sa mesure de confirmation."""
 
     ph_before: float
     tac_before_ppm: float
     bicarbonate_kg: float = Field(ge=0)
+    bicarbonate_total_kg: float | None = Field(default=None, ge=0)
     created_at: datetime = Field(default_factory=datetime.now)
 
 

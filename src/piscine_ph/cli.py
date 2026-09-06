@@ -16,6 +16,8 @@ from .chemistry import ChemistryCalculator
 from .models import (
     ChlorineTreatment,
     ElectrolysisStatus,
+    NaOHConcentrationSource,
+    PendingBicarbonatePlan,
     ProtocolConfig,
     ProtocolState,
     ProtocolStep,
@@ -128,7 +130,8 @@ def show_supply_estimate(state: ProtocolState) -> None:
     )
     typer.secho("Approvisionnement indicatif (pas une dose) :", fg=typer.colors.CYAN)
     typer.echo(
-        f"Soude 300 g/L : {estimate.naoh_solution_recommended_l:.0f} L a acheter "
+        f"Soude {state.config.naoh_concentration_g_l:.0f} g/L : "
+        f"{estimate.naoh_solution_recommended_l:.0f} L a acheter "
         "(repere prudent, non predictif)."
     )
     typer.echo(
@@ -138,11 +141,121 @@ def show_supply_estimate(state: ProtocolState) -> None:
     )
 
 
+def show_naoh_declaration(state: ProtocolState) -> None:
+    """Affiche la concentration réellement archivée et son mode de détermination."""
+    config = state.config
+    detail = config.naoh_concentration_source.value
+    if config.naoh_concentration_source is NaOHConcentrationSource.MASS_PERCENT:
+        detail = (
+            f"{config.naoh_label_percent:.1f} % m/m, densite {config.naoh_density_g_ml:.3f} g/mL"
+        )
+    elif config.naoh_concentration_source is NaOHConcentrationSource.VOLUME_PERCENT:
+        detail = f"{config.naoh_label_percent:.1f} % m/v"
+    typer.secho(
+        f"Soude archivee : {config.naoh_concentration_g_l:.0f} g/L ({detail}).",
+        fg=typer.colors.CYAN,
+    )
+
+
+def prompted_choice(question: str, choices: list[str], default: int = 1) -> int:
+    """Affiche des choix numérotés et redemande tant que l'entrée est invalide."""
+    typer.echo(question)
+    for index, choice in enumerate(choices, start=1):
+        typer.echo(f"  {index}. {choice}")
+    while True:
+        selected = typer.prompt("Votre choix", default=default, type=int)
+        if 1 <= selected <= len(choices):
+            return selected
+        typer.secho("Choix invalide. Recommencez.", fg=typer.colors.YELLOW)
+
+
+def prompt_naoh_concentration() -> tuple[
+    float, NaOHConcentrationSource, float | None, float | None
+]:
+    """Guide la conversion de l'étiquette vers la seule unité utilisée par le modèle."""
+    typer.secho("SOUDE — CONCENTRATION", fg=typer.colors.CYAN, bold=True)
+    typer.echo("Utiliser l'etiquette ou la FDS ; le poids du bidon plein seul ne suffit pas.")
+    choice = prompted_choice(
+        "Comment la concentration est-elle indiquee ?",
+        [
+            "Valeur directe en g/L",
+            "Pourcentage massique (% m/m) et densite en g/mL",
+            "Pourcentage volumique (% m/v)",
+        ],
+    )
+    if choice == 1:
+        concentration = typer.prompt("Concentration NaOH en g/L", type=float)
+        return concentration, NaOHConcentrationSource.GRAMS_PER_LITRE, None, None
+    percent = typer.prompt("Pourcentage de NaOH", type=float)
+    if choice == 2:
+        density = typer.prompt("Densite en g/mL (a la temperature indiquee par la FDS)", type=float)
+        concentration = percent * density * 10
+        typer.secho(
+            f"Conversion retenue : {percent:.1f} % m/m x {density:.3f} g/mL = "
+            f"{concentration:.0f} g/L.",
+            fg=typer.colors.GREEN,
+        )
+        return concentration, NaOHConcentrationSource.MASS_PERCENT, percent, density
+    concentration = percent * 10
+    typer.secho(
+        f"Conversion retenue : {percent:.1f} % m/v = {concentration:.0f} g/L.",
+        fg=typer.colors.GREEN,
+    )
+    return concentration, NaOHConcentrationSource.VOLUME_PERCENT, percent, None
+
+
+def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
+    """Collecte le traitement qui influence les avertissements et le stock conseillé."""
+    typer.secho("TRAITEMENT EN COURS", fg=typer.colors.CYAN, bold=True)
+    electrolysis_choice = prompted_choice(
+        "Etat de l'electrolyse ?", ["Arretee", "En marche", "Inconnu"], default=3
+    )
+    electrolysis = {
+        1: ElectrolysisStatus.STOPPED,
+        2: ElectrolysisStatus.RUNNING,
+        3: ElectrolysisStatus.UNKNOWN,
+    }[electrolysis_choice]
+    chlorine_choice = prompted_choice(
+        "Desinfectant actuellement utilise ?",
+        ["Galets stabilises", "Dichlore stabilise", "Chlore non stabilise", "Inconnu"],
+        default=4,
+    )
+    chlorine = {
+        1: ChlorineTreatment.STABILIZED_TABLETS,
+        2: ChlorineTreatment.STABILIZED_DICHLOR,
+        3: ChlorineTreatment.UNSTABILIZED,
+        4: ChlorineTreatment.UNKNOWN,
+    }[chlorine_choice]
+    cya = None
+    if chlorine in {
+        ChlorineTreatment.STABILIZED_TABLETS,
+        ChlorineTreatment.STABILIZED_DICHLOR,
+    } and typer.confirm("Avez-vous une mesure CYA recente a enregistrer ?", default=False):
+        cya = typer.prompt("CYA mesure en ppm", type=float)
+    return TreatmentContext(electrolysis_status=electrolysis, chlorine_treatment=chlorine), cya
+
+
 def show_bucket_preparation(naoh_ml: float, water_l: float, useful_volume_l: float) -> None:
     """Présente les volumes à préparer dans le seau pour une dose de NaOH."""
     typer.secho("Prochaine dose preparee", fg=typer.colors.GREEN)
     typer.echo(f"Mettre {water_l:.2f} L d'eau dans le seau, puis {naoh_ml:.0f} mL de NaOH.")
     typer.echo(f"Volume utile : {useful_volume_l:.2f} L. Mesurer ensuite pH et TAC du bassin.")
+
+
+def show_bicarbonate_plan(pending: PendingBicarbonatePlan) -> None:
+    """Présente un seul lot TAC et l'attente obligatoire avant sa confirmation."""
+    total_kg = pending.bicarbonate_total_kg or pending.bicarbonate_kg
+    wait_minutes = SETTINGS.workflow.bicarbonate_wait_min_minutes
+    wait_text = f"{wait_minutes // 60} h" if wait_minutes % 60 == 0 else f"{wait_minutes} min"
+    typer.secho(
+        f"Bicarbonate requis depuis cette mesure : {total_kg:.2f} kg", fg=typer.colors.GREEN
+    )
+    typer.echo(f"Lot a ajouter maintenant : {pending.bicarbonate_kg:.2f} kg maximum.")
+    typer.secho(
+        f"Filtration en marche : attendre au minimum {wait_text} avant de mesurer pH et TAC.",
+        fg=typer.colors.YELLOW,
+    )
+    typer.echo("Ne pas ajouter le lot suivant avant cette mesure et le nouveau calcul.")
 
 
 @app.command()
@@ -162,6 +275,14 @@ def start(
             help="Desinfectant initial : inconnu, galets_stabilises, dichlore_stabilise ou chlore_non_stabilise."
         ),
     ] = ChlorineTreatment.UNKNOWN,
+    naoh_g_l: float | None = typer.Option(
+        None, min=0.01, help="Concentration directe de NaOH en g/L (mode non guide)."
+    ),
+    guided: bool = typer.Option(
+        True,
+        "--guided/--no-guided",
+        help="Poser le questionnaire avant la creation d'un nouveau protocole.",
+    ),
     force: bool = typer.Option(
         False, help="Archive un nouveau protocole meme si un autre est actif."
     ),
@@ -170,6 +291,32 @@ def start(
     try:
         protocol_service = service()
         existing = protocol_service.repository.active()
+        initial_cya: float | None = None
+        if guided and (existing is None or force):
+            typer.secho("QUESTIONNAIRE DE DEMARRAGE", fg=typer.colors.GREEN, bold=True)
+            typer.echo("Les valeurs entrees seront archivees avec ce protocole.")
+            volume_m3 = typer.prompt("Volume du bassin en m3", default=volume_m3, type=float)
+            initial_ph = typer.prompt("pH mesure avant correction", default=initial_ph, type=float)
+            initial_tac = typer.prompt("TAC mesure en ppm CaCO3", default=initial_tac, type=float)
+            intermediate_ph = typer.prompt(
+                "Palier pH avant correction TAC", default=intermediate_ph, type=float
+            )
+            target_ph = typer.prompt("pH cible", default=target_ph, type=float)
+            concentration, source, percent, density = prompt_naoh_concentration()
+            treatment, initial_cya = prompt_treatment_context()
+        else:
+            concentration = naoh_g_l or SETTINGS.protocol.naoh_concentration_g_l
+            source = (
+                NaOHConcentrationSource.GRAMS_PER_LITRE
+                if naoh_g_l is not None
+                else NaOHConcentrationSource.DEFAULT
+            )
+            percent = None
+            density = None
+            treatment = TreatmentContext(
+                electrolysis_status=electrolysis,
+                chlorine_treatment=chlorine,
+            )
         config = ProtocolConfig(
             pool_volume_m3=volume_m3,
             initial_ph=initial_ph,
@@ -177,15 +324,18 @@ def start(
             target_ph=target_ph,
             initial_tac_ppm=initial_tac,
             bucket_volume_l=bucket_l,
+            naoh_concentration_g_l=concentration,
+            naoh_concentration_source=source,
+            naoh_label_percent=percent,
+            naoh_density_g_ml=density,
         )
         state = protocol_service.start(
             config,
-            treatment=TreatmentContext(
-                electrolysis_status=electrolysis,
-                chlorine_treatment=chlorine,
-            ),
+            treatment=treatment,
             replace_active=force,
         )
+        if initial_cya is not None and (existing is None or force):
+            state = protocol_service.record_cyanuric_acid_measurement(initial_cya)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
     if existing and not force:
@@ -193,6 +343,7 @@ def start(
         typer.echo(f"Etape actuelle : {state.step}")
     else:
         typer.secho(f"Protocole cree : {state.archive_name}", fg=typer.colors.GREEN)
+    show_naoh_declaration(state)
     if state.initial_coherence and state.initial_coherence.warnings:
         for warning in state.initial_coherence.warnings:
             typer.secho(f"Alerte initiale : {warning}", fg=typer.colors.YELLOW)
@@ -216,10 +367,41 @@ def status() -> None:
     if state.pending_naoh:
         typer.echo(f"Dose NaOH en attente : {state.pending_naoh.naoh_ml:.0f} mL")
     if state.pending_bicarbonate:
-        typer.echo(f"Bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg")
+        typer.echo(
+            f"Lot bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg"
+        )
     show_cumulative_additions(state)
+    show_naoh_declaration(state)
     show_treatment(state)
     show_supply_estimate(state)
+    show_next_command(state)
+
+
+@app.command("configure-naoh")
+def configure_naoh() -> None:
+    """Corrige la déclaration de soude d'un protocole déjà en cours.
+
+    Les volumes et mesures déjà confirmés sont conservés. La concentration
+    déclarée s'applique au même produit utilisé depuis le début et recalcule
+    son cumul théorique ; elle ne doit donc pas être employée après un changement
+    de bidon de concentration différente.
+    """
+    try:
+        typer.secho("DECLARATION DE LA SOUDE DU PROTOCOLE EN COURS", fg=typer.colors.GREEN)
+        typer.echo(
+            "Utilisez cette commande seulement si cette même lessive de soude a ete "
+            "employee pour tous les apports deja confirmes."
+        )
+        concentration, source, percent, density = prompt_naoh_concentration()
+        state = service().set_naoh_concentration(concentration, source, percent, density)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.secho(
+        "Declaration de soude mise a jour ; les volumes et mesures sont conserves.",
+        fg=typer.colors.GREEN,
+    )
+    show_naoh_declaration(state)
+    show_cumulative_additions(state)
     show_next_command(state)
 
 
@@ -314,6 +496,27 @@ def cancel_dose() -> None:
     show_next_command(state)
 
 
+@app.command("cancel-tac-plan")
+def cancel_tac_plan() -> None:
+    """Annule un lot de bicarbonate préparé et non versé après confirmation."""
+    try:
+        state = service().active()
+        pending = state.pending_bicarbonate
+        if pending is None:
+            raise ValueError("Aucun lot de bicarbonate en attente a annuler.")
+        if not typer.confirm(
+            f"Confirmer que les {pending.bicarbonate_kg:.2f} kg n'ont PAS ete verses dans le bassin ?"
+        ):
+            typer.echo("Annulation abandonnee.")
+            return
+        state = service().cancel_pending_bicarbonate()
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Lot de bicarbonate annule.", fg=typer.colors.GREEN)
+    show_next_command(state)
+
+
 @app.command("cancel-protocol")
 def cancel_protocol() -> None:
     """Archive le protocole actif comme annulé, sans supprimer les données."""
@@ -370,7 +573,7 @@ def measure(
 
 @app.command("plan-tac")
 def plan_tac(tac: Annotated[float, typer.Option(min=0.01)]) -> None:
-    """Calcule et découpe l'apport de bicarbonate depuis le TAC réellement mesuré."""
+    """Prépare un seul lot de bicarbonate depuis le TAC réellement mesuré."""
     try:
         state = service().plan_bicarbonate(tac)
     except ValueError as error:
@@ -378,11 +581,7 @@ def plan_tac(tac: Annotated[float, typer.Option(min=0.01)]) -> None:
         raise typer.Exit(1)
     pending = state.pending_bicarbonate
     assert pending is not None
-    batches = ChemistryCalculator().bicarbonate_batches_kg(pending.bicarbonate_kg)
-    typer.secho(f"Bicarbonate total : {pending.bicarbonate_kg:.2f} kg", fg=typer.colors.GREEN)
-    typer.echo(
-        "Apports en poudre devant les buses : " + ", ".join(f"{value:.2f} kg" for value in batches)
-    )
+    show_bicarbonate_plan(pending)
     show_next_command(state)
 
 
@@ -402,7 +601,8 @@ def measure_tac(
     show_cumulative_additions(state)
     if state.step.value == "tac_vers_80":
         typer.secho(
-            "TAC sous 80 ppm : refaire plan-tac avec la nouvelle mesure.", fg=typer.colors.YELLOW
+            "TAC sous 80 ppm : refaire plan-tac avec la nouvelle mesure pour preparer un seul lot.",
+            fg=typer.colors.YELLOW,
         )
     show_next_command(state)
 
@@ -445,7 +645,10 @@ def menu() -> None:
         return
 
     if state.pending_bicarbonate:
-        typer.echo("Le bicarbonate affiche precedemment doit etre ajoute puis mesure.")
+        typer.echo(
+            "Ajouter uniquement le lot de bicarbonate affiche, puis attendre avant de mesurer."
+        )
+        show_bicarbonate_plan(state.pending_bicarbonate)
         show_next_command(state)
         if not typer.confirm("Avez-vous deja mesure le pH et le TAC apres bicarbonate ?"):
             return
@@ -463,9 +666,7 @@ def menu() -> None:
         state = protocol_service.plan_bicarbonate(tac)
         pending = state.pending_bicarbonate
         assert pending is not None
-        batches = ChemistryCalculator().bicarbonate_batches_kg(pending.bicarbonate_kg)
-        typer.secho(f"Bicarbonate total : {pending.bicarbonate_kg:.2f} kg", fg=typer.colors.GREEN)
-        typer.echo("Apports : " + ", ".join(f"{value:.2f} kg" for value in batches))
+        show_bicarbonate_plan(pending)
         show_next_command(state)
         return
 

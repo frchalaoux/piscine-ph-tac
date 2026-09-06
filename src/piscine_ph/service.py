@@ -17,6 +17,7 @@ from .models import (
     CoherenceCheck,
     CyanuricAcidMeasurement,
     ElectrolysisStatus,
+    NaOHConcentrationSource,
     NaOHDoseRecord,
     PendingBicarbonatePlan,
     PendingNaOHDose,
@@ -152,6 +153,57 @@ class ProtocolService:
         state.add_event(
             "Contexte traitement : "
             f"electrolyse {electrolysis_status.value}, chlore {chlorine_treatment.value}"
+        )
+        self.repository.save(state)
+        return state
+
+    def set_naoh_concentration(
+        self,
+        concentration_g_l: float,
+        source: NaOHConcentrationSource,
+        label_percent: float | None = None,
+        density_g_ml: float | None = None,
+    ) -> ProtocolState:
+        """Corrige la concentration du produit pour un protocole déjà commencé.
+
+        Cette correction s'applique à tous les apports de soude confirmés de
+        l'archive. C'est le comportement attendu lorsque le même bidon a été
+        employé depuis le début ; le cumul en moles et les contrôles associés
+        sont alors recalculés sans perdre les mesures ni les volumes versés.
+        """
+        state = self.active()
+        if state.pending_naoh:
+            raise ValueError(
+                "Confirmez la dose de NaOH en attente, ou annulez-la si elle n'a pas ete versee, "
+                "avant de changer la concentration."
+            )
+
+        previous = state.config.naoh_concentration_g_l
+        values = state.config.model_dump()
+        values.update(
+            naoh_concentration_g_l=concentration_g_l,
+            naoh_concentration_source=source,
+            naoh_label_percent=label_percent,
+            naoh_density_g_ml=density_g_ml,
+        )
+        state.config = ProtocolConfig.model_validate(values)
+        for dose in state.naoh_doses:
+            dose.coherence = self.enrich_check_with_treatment(
+                state,
+                self.chemistry.verify(
+                    state.config,
+                    ph_before=dose.ph_before,
+                    tac_before_ppm=dose.tac_before_ppm,
+                    ph_after=dose.ph_after,
+                    tac_after_ppm=dose.tac_after_ppm,
+                    naoh_ml=dose.naoh_ml,
+                ),
+            )
+        self.refresh_cumulative_additions(state)
+        state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
+        state.add_event(
+            "Concentration NaOH corrigee pour les apports confirmes : "
+            f"{previous:.0f} vers {concentration_g_l:.0f} g/L ({source.value})"
         )
         self.repository.save(state)
         return state
@@ -325,6 +377,17 @@ class ProtocolService:
         self.repository.save(state)
         return state
 
+    def cancel_pending_bicarbonate(self) -> ProtocolState:
+        """Annule un lot de bicarbonate préparé uniquement s'il n'a pas été ajouté."""
+        state = self.active()
+        pending = state.pending_bicarbonate
+        if pending is None:
+            raise ValueError("Aucun lot de bicarbonate en attente a annuler.")
+        state.pending_bicarbonate = None
+        state.add_event(f"Lot bicarbonate annule avant ajout : {pending.bicarbonate_kg:.2f} kg")
+        self.repository.save(state)
+        return state
+
     def cancel_protocol(self) -> ProtocolState:
         """Archive le protocole actif comme annulé, sans effacer son journal.
 
@@ -428,14 +491,18 @@ class ProtocolService:
             raise ValueError("Le bicarbonate n'est pas l'etape active du protocole.")
         if state.pending_bicarbonate:
             raise ValueError("Un apport de bicarbonate est deja en attente de mesure.")
-        kg = self.chemistry.bicarbonate_kg(state.config, measured_tac_ppm)
+        total_kg = self.chemistry.bicarbonate_kg(state.config, measured_tac_ppm)
+        kg = min(total_kg, SETTINGS.workflow.bicarbonate_batch_max_kg)
         state.current_tac_ppm = measured_tac_ppm
         state.pending_bicarbonate = PendingBicarbonatePlan(
             ph_before=state.current_ph,
             tac_before_ppm=measured_tac_ppm,
             bicarbonate_kg=kg,
+            bicarbonate_total_kg=total_kg,
         )
-        state.add_event(f"Apport bicarbonate prepare : {kg:.2f} kg")
+        state.add_event(
+            f"Lot bicarbonate prepare : {kg:.2f} kg (besoin calcule : {total_kg:.2f} kg)"
+        )
         self.repository.save(state)
         return state
 

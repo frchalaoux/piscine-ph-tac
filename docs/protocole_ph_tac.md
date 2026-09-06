@@ -43,19 +43,25 @@ uv run piscine-ph start
 
 La création affiche un plan d'approvisionnement archivé dans le JSON : volume prudent de soude à acheter et bicarbonate théorique calculé depuis le TAC initial, complété par une marge d'achat. Le repère de soude n'est pas une prédiction de consommation, car le pH ne permet pas à lui seul de connaître la demande acide réelle du bassin. La commande `status` réaffiche ce plan.
 
+Avant la création d'une nouvelle archive, `start` ouvre un questionnaire guidé. Il transforme la concentration de soude lue sur l'étiquette ou la FDS en g/L, qui est l'unité requise par les calculs. Une concentration exprimée en `% m/m` exige aussi la densité : par exemple 30 % m/m et 1,33 g/mL donnent 399 g/L. Une concentration `% m/v` se convertit directement : 30 % m/v donnent 300 g/L. Le poids du bidon plein ne permet pas cette conversion sans tare et volume.
+
 Ou renseigner des valeurs mesurées différentes :
 
 ```bash
 uv run piscine-ph start \
+  --no-guided \
   --volume-m3 46 \
   --initial-ph 4.1 \
   --intermediate-ph 6.0 \
   --target-ph 7.2 \
   --initial-tac 50 \
-  --bucket-l 10
+  --bucket-l 10 \
+  --naoh-g-l 400
 ```
 
 Un seul protocole non terminé est repris automatiquement. Lancer de nouveau `uv run piscine-ph start` ne crée donc pas de doublon : la commande affiche et reprend le protocole actif. Pour commencer volontairement un nouveau protocole malgré un protocole actif, utiliser `--force`.
+
+Si l'unité de soude d'un protocole existant a été mal déclarée, ne pas lancer `start --force`. Après avoir confirmé ou annulé une éventuelle dose de NaOH en attente, exécuter `uv run piscine-ph configure-naoh`. La commande redemande l'unité et corrige la concentration pour le même produit employé depuis le début ; elle conserve les volumes et mesures, recalcule le cumul et ajoute un événement au journal. Elle ne convient pas à un changement de produit en cours de protocole.
 
 Pour arrêter explicitement le protocole actif tout en conservant son journal JSON, utiliser `uv run piscine-ph cancel-protocol`, puis lancer `uv run piscine-ph start`.
 
@@ -120,15 +126,15 @@ Lorsque le palier pH 6 est atteint, mesurer le TAC réel puis calculer l'apport 
 uv run piscine-ph plan-tac --tac 50
 ```
 
-Le programme calcule la masse de NaHCO3 nécessaire et la découpe en apports de 0,50 kg maximum. Pour 46 m3, de 50 à 80 ppm, l'apport théorique est d'environ **2,32 kg**.
+Le programme calcule la masse de NaHCO3 nécessaire, mais ne prépare qu'un **lot de 1 kg maximum**. Pour 46 m3, de 50 à 80 ppm, le besoin théorique initial est d'environ **2,32 kg** ; cette valeur n’autorise pas à verser les 2,32 kg sans contrôle.
 
-Ajouter le bicarbonate en poudre devant les buses, avec filtration, selon l'étiquette du produit. Laisser dissoudre et circuler, puis mesurer pH et TAC :
+Ajouter uniquement le lot affiché en poudre devant les buses, avec filtration, selon l'étiquette du produit. Attendre au minimum **4 heures** de circulation avant de mesurer pH et TAC :
 
 ```bash
 uv run piscine-ph measure-tac --ph 6.15 --tac 80
 ```
 
-Si le TAC mesuré est sous 80 ppm, le programme reste à l'étape TAC. Refaire `plan-tac` avec la nouvelle mesure, ajouter l'apport complémentaire, puis refaire `measure-tac`.
+Si le TAC mesuré est sous 80 ppm, le programme reste à l'étape TAC. Refaire `plan-tac` avec la nouvelle mesure : il recalcule le besoin restant et prépare un nouveau lot de 1 kg maximum. Ne jamais confirmer un lot partiellement versé comme s'il avait été versé en totalité.
 
 Le passage à l'ajustement final n'est autorisé que lorsque le TAC saisi est supérieur ou égal à 80 ppm.
 

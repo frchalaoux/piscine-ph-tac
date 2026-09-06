@@ -37,7 +37,8 @@ Ce fichier est validé au démarrage. Modifier une valeur n’affecte jamais les
 | `protocol.bucket_volume_l` | L | Volume nominal du seau. |
 | `protocol.naoh_concentration_g_l` | g/L | Concentration de la soude utilisée dans les bilans. |
 | `workflow.naoh_*` | pH ou mL | Seuils et portions indicatives de soude. Ils ne prédisent pas la demande réelle du bassin. |
-| `workflow.bicarbonate_batch_max_kg` | kg | Taille maximale d’un apport de bicarbonate proposé. |
+| `workflow.bicarbonate_batch_max_kg` | kg | Taille maximale d’un seul lot de bicarbonate proposé. |
+| `workflow.bicarbonate_wait_min_minutes` | min | Attente minimale de filtration avant sa mesure de confirmation. |
 | `supply_planning.naoh_purchase_recommended_l` | L | Stock prudent de soude à acheter, non assimilable à une dose. |
 | `supply_planning.bicarbonate_purchase_margin_kg` | kg | Marge ajoutée au besoin théorique en bicarbonate. |
 | `supply_planning.stabilized_chlorine_extra_bicarbonate_margin_kg` | kg | Marge supplémentaire lorsque les galets stabilisés sont déclarés. |
@@ -56,12 +57,14 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
-| `config` | objet | Photographie immuable des paramètres de bassin utilisés au démarrage. |
+| `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
 | `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `termine` ou `annule`. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
 
-`config` contient les mêmes champs que `defaults.json.protocol`, mais ne doit pas être modifié : changer le volume ou l’objectif d’une archive compromettrait la traçabilité des doses déjà enregistrées.
+`config` contient les mêmes champs que `defaults.json.protocol`. Ne modifiez pas directement le JSON : changer le volume ou l’objectif compromettrait la traçabilité des doses. La seule correction prévue par l'application est `configure-naoh`, qui met à jour de manière journalisée la concentration d'un même produit et recalcule le cumul des apports NaOH déjà confirmés.
+
+Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_concentration_source`, `naoh_label_percent` et, pour un pourcentage massique, `naoh_density_g_ml`. Ces éléments documentent comment `naoh_concentration_g_l` a été obtenu ; ils sont particulièrement importants car `% m/m` et `% m/v` ne donnent pas la même concentration en g/L.
 
 ### Contexte de désinfection
 
@@ -108,11 +111,11 @@ Les champs `pending_*` sont essentiels : une dose seulement préparée n’est p
 | Champ | Présence | Contenu |
 | --- | --- | --- |
 | `pending_naoh` | objet ou `null` | Soude préparée, en attente de `measure`. Champs : `phase`, pH/TAC avant, `naoh_ml`, `water_l`, date. |
-| `pending_bicarbonate` | objet ou `null` | Bicarbonate planifié, en attente de `measure-tac`. Champs : pH/TAC avant, `bicarbonate_kg`, date. |
+| `pending_bicarbonate` | objet ou `null` | Un seul lot de bicarbonate planifié, en attente de `measure-tac`. Champs : pH/TAC avant, `bicarbonate_kg` (lot), `bicarbonate_total_kg` (besoin calculé avant fractionnement), date. |
 | `naoh_doses` | liste | Doses de soude confirmées par une mesure après ajout. Chaque entrée ajoute `ph_after`, `tac_after_ppm`, `coherence`, `recorded_at`. |
 | `bicarbonate_doses` | liste | Apports de bicarbonate confirmés, avec les mêmes mesures après ajout. |
 
-Une dose en attente est supprimée par `cancel-dose` uniquement si elle n’a pas été versée. Dès que `measure` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul.
+Une dose en attente est supprimée par `cancel-dose` (soude) ou `cancel-tac-plan` (bicarbonate) uniquement si elle n’a pas été versée. Dès que `measure` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul. Après chaque lot de bicarbonate, une nouvelle mesure et un nouveau `plan-tac` sont nécessaires avant de préparer le lot suivant.
 
 ### Contrôle de cohérence
 

@@ -7,6 +7,7 @@ import pytest
 from piscine_ph.models import (
     ChlorineTreatment,
     ElectrolysisStatus,
+    NaOHConcentrationSource,
     ProtocolConfig,
     ProtocolStep,
 )
@@ -72,6 +73,32 @@ def test_supply_estimate_is_persisted_and_accounts_for_stabilized_tablets(tmp_pa
     assert state.supply_estimate.includes_stabilized_chlorine_margin is True
 
 
+def test_bicarbonate_is_prepared_and_recalculated_one_kg_at_a_time(tmp_path) -> None:
+    repository = JsonProtocolRepository(tmp_path)
+    service = ProtocolService(repository)
+    state = service.start(ProtocolConfig())
+    state.step = ProtocolStep.TAC_TO_TARGET
+    state.current_ph = 6.0
+    state.current_tac_ppm = 30.0
+    repository.save(state)
+
+    state = service.plan_bicarbonate(30.0)
+    first_lot = state.pending_bicarbonate
+    assert first_lot is not None
+    assert first_lot.bicarbonate_kg == 1.0
+    assert first_lot.bicarbonate_total_kg == pytest.approx(3.86, abs=0.01)
+
+    state = service.record_bicarbonate_measurement(ph=6.1, tac_ppm=40.0)
+    assert state.step is ProtocolStep.TAC_TO_TARGET
+    assert state.bicarbonate_doses[-1].bicarbonate_kg == 1.0
+
+    state = service.plan_bicarbonate(40.0)
+    next_lot = state.pending_bicarbonate
+    assert next_lot is not None
+    assert next_lot.bicarbonate_kg == 1.0
+    assert next_lot.bicarbonate_total_kg == pytest.approx(3.09, abs=0.01)
+
+
 def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     created = service.start(ProtocolConfig())
@@ -79,6 +106,35 @@ def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     resumed = service.start(ProtocolConfig())
 
     assert resumed.archive_name == created.archive_name
+
+
+def test_naoh_concentration_can_be_corrected_for_an_active_protocol(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig())
+    service.prepare_naoh(250)
+    service.record_naoh_measurement(ph=5.0, tac_ppm=50.0)
+
+    state = service.set_naoh_concentration(
+        399.0,
+        NaOHConcentrationSource.MASS_PERCENT,
+        label_percent=30.0,
+        density_g_ml=1.33,
+    )
+
+    assert state.config.naoh_concentration_g_l == 399.0
+    assert state.config.naoh_concentration_source is NaOHConcentrationSource.MASS_PERCENT
+    assert state.cumulative_additions.naoh_solution_ml == 250.0
+    assert state.cumulative_additions.naoh_moles == pytest.approx(2.494, abs=0.001)
+    assert "300 vers 399 g/L" in state.journal[-1].event
+
+
+def test_naoh_concentration_cannot_change_while_a_dose_is_pending(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig())
+    service.prepare_naoh(250)
+
+    with pytest.raises(ValueError, match="dose de NaOH en attente"):
+        service.set_naoh_concentration(399.0, NaOHConcentrationSource.GRAMS_PER_LITRE)
 
 
 def test_repository_recreates_missing_data_directory(tmp_path) -> None:
