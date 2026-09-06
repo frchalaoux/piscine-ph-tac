@@ -27,17 +27,17 @@ La prévision de pH du contrôle de cohérence devient en revanche **indicative*
 Au début de la période temporaire, déclarer le contexte :
 
 ```bash
-uv run piscine-ph start --electrolysis arretee --chlorine galets_stabilises
+piscine-ph start --electrolysis arretee --chlorine galets_stabilises
 ```
 
-Si le protocole existe déjà, utiliser `uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
+Si le protocole existe déjà, utiliser `piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
 
 À la création, l'application affiche et stocke également un plan d'approvisionnement. Il comprend un repère prudent de soude à acheter et une quantité de bicarbonate fondée sur le TAC initial ; une marge additionnelle est incluse avec les galets stabilisés. Cette information sert uniquement à préparer les achats. Elle ne prédit pas la quantité de soude à verser et ne remplace jamais les mesures réalisées entre deux doses.
 
 Journaliser chaque recharge de doseur :
 
 ```bash
-uv run piscine-ph record-tablets --count 2 --unit-mass-g 200 --product "galets trichlore 200 g"
+piscine-ph record-tablets --count 2 --unit-mass-g 200 --product "galets trichlore 200 g"
 ```
 
 Cette commande est un journal, non une estimation de CYA. Elle exige que le contexte `galets_stabilises` ait d'abord été déclaré.
@@ -45,7 +45,7 @@ Cette commande est un journal, non une estimation de CYA. Elle exige que le cont
 Après un test de stabilisant, enregistrer la valeur réellement lue :
 
 ```bash
-uv run piscine-ph measure-cya --cya 35
+piscine-ph measure-cya --cya 35
 ```
 
 La commande `status` affiche le traitement déclaré, le nombre de galets journalisés et la dernière mesure CYA. À partir de 50 ppm, elle affiche une vigilance ; à partir de 75 ppm, elle alerte de ne plus ajouter de chlore stabilisé et d'évaluer un renouvellement partiel d'eau. Ces seuils sont des garde-fous de suivi pour une piscine privée : les limites réglementaires citées par l'Anses s'appliquent aux piscines collectives et ne remplacent pas la notice du fabricant. [Anses](https://www.anses.fr/fr/system/files/EAUX2018SA0034Ra.pdf)
@@ -68,7 +68,7 @@ Un produit à base de dichloroisocyanurate ou de trichloroisocyanurate est stabi
 Quand la cellule est réparée : arrêter les galets stabilisés, contrôler pH, TAC, chlore libre et CYA, puis enregistrer le nouveau contexte :
 
 ```bash
-uv run piscine-ph treatment --electrolysis en_marche --chlorine chlore_non_stabilise
+piscine-ph treatment --electrolysis en_marche --chlorine chlore_non_stabilise
 ```
 
 Le champ `chlore_non_stabilise` décrit ici le chlore produit par l'électrolyse : il n'ajoute pas de CYA. La tendance à la hausse du pH peut alors reprendre ; reprendre les corrections progressivement, à partir des nouvelles mesures plutôt que de l'ancien rythme.

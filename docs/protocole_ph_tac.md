@@ -15,10 +15,10 @@ uv sync
 Cette commande crée l'environnement `.venv/`, installe les dépendances et rend la commande disponible via `uv run`.
 
 ```bash
-uv run piscine-ph --help
+piscine-ph --help
 ```
 
-Chaque commande affiche la commande suivante adaptée à l'état enregistré. Le mode guidé `uv run piscine-ph menu` propose aussi une action à la fois et attend les mesures réelles avant toute transition.
+Chaque commande affiche la commande suivante adaptée à l'état enregistré. Le mode guidé `piscine-ph menu` propose aussi une action à la fois et attend les mesures réelles avant toute transition.
 
 ## Paramètres par défaut
 
@@ -38,7 +38,7 @@ Les mesures TAC sont saisies par paliers de 10 ppm. Les valeurs attendues sont d
 Créer un protocole avec ces valeurs :
 
 ```bash
-uv run piscine-ph start
+piscine-ph start
 ```
 
 La création affiche un plan d'approvisionnement archivé dans le JSON : volume prudent de soude à acheter et bicarbonate théorique calculé depuis le TAC initial, complété par une marge d'achat. Le repère de soude n'est pas une prédiction de consommation, car le pH ne permet pas à lui seul de connaître la demande acide réelle du bassin. La commande `status` réaffiche ce plan.
@@ -48,7 +48,7 @@ Avant la création d'une nouvelle archive, `start` ouvre un questionnaire guidé
 Ou renseigner des valeurs mesurées différentes :
 
 ```bash
-uv run piscine-ph start \
+piscine-ph start \
   --no-guided \
   --volume-m3 46 \
   --initial-ph 4.1 \
@@ -59,11 +59,11 @@ uv run piscine-ph start \
   --naoh-g-l 400
 ```
 
-Un seul protocole non terminé est repris automatiquement. Lancer de nouveau `uv run piscine-ph start` ne crée donc pas de doublon : la commande affiche et reprend le protocole actif. Pour commencer volontairement un nouveau protocole malgré un protocole actif, utiliser `--force`.
+Un seul protocole non terminé est repris automatiquement. Lancer de nouveau `piscine-ph start` ne crée donc pas de doublon : la commande affiche et reprend le protocole actif. Pour commencer volontairement un nouveau protocole malgré un protocole actif, utiliser `--force`.
 
-Si l'unité de soude d'un protocole existant a été mal déclarée, ne pas lancer `start --force`. Après avoir confirmé ou annulé une éventuelle dose de NaOH en attente, exécuter `uv run piscine-ph configure-naoh`. La commande redemande l'unité et corrige la concentration pour le même produit employé depuis le début ; elle conserve les volumes et mesures, recalcule le cumul et ajoute un événement au journal. Elle ne convient pas à un changement de produit en cours de protocole.
+Si l'unité de soude d'un protocole existant a été mal déclarée, ne pas lancer `start --force`. Après avoir confirmé ou annulé une éventuelle dose de NaOH en attente, exécuter `piscine-ph configure-naoh`. La commande redemande l'unité et corrige la concentration pour le même produit employé depuis le début ; elle conserve les volumes et mesures, recalcule le cumul et ajoute un événement au journal. Elle ne convient pas à un changement de produit en cours de protocole.
 
-Pour arrêter explicitement le protocole actif tout en conservant son journal JSON, utiliser `uv run piscine-ph cancel-protocol`, puis lancer `uv run piscine-ph start`.
+Pour arrêter explicitement le protocole actif tout en conservant son journal JSON, utiliser `piscine-ph cancel-protocol`, puis lancer `piscine-ph start`.
 
 ## Vue d'ensemble du protocole
 
@@ -90,14 +90,14 @@ Chaque transition dépend d'une mesure réelle. Aucune étape ne progresse sur u
 Vérifier l'état en cours :
 
 ```bash
-uv run piscine-ph status
+piscine-ph status
 ```
 
 Préparer une dose de soude. Sans option, le programme propose une dose indicative (250, 100 ou 50 mL selon l'écart au palier) ; elle reste modifiable :
 
 ```bash
-uv run piscine-ph dose
-uv run piscine-ph dose --naoh-ml 150
+piscine-ph dose
+piscine-ph dose --naoh-ml 150
 ```
 
 Le programme affiche l'eau et le NaOH à mettre dans le seau. Pour un seau de 10 L, il limite la préparation à 8 L, afin de laisser 20 % de marge libre. Il limite également le volume de NaOH à 10 % du volume utile.
@@ -113,7 +113,7 @@ Ajouter lentement la soude dans l'eau, jamais l'inverse. Mélanger avec précaut
 Enregistrer la mesure :
 
 ```bash
-uv run piscine-ph measure --ph 5.20 --tac 50
+piscine-ph measure --ph 5.20 --tac 50
 ```
 
 Le programme conserve la dose, les valeurs avant/après et leur variation. Tant que le pH est sous 6,0, refaire `dose`, puis `measure`.
@@ -123,7 +123,7 @@ Le programme conserve la dose, les valeurs avant/après et leur variation. Tant 
 Lorsque le palier pH 6 est atteint, mesurer le TAC réel puis calculer l'apport de bicarbonate :
 
 ```bash
-uv run piscine-ph plan-tac --tac 50
+piscine-ph plan-tac --tac 50
 ```
 
 Le programme calcule la masse de NaHCO3 nécessaire, mais ne prépare qu'un **lot de 1 kg maximum**. Pour 46 m3, de 50 à 80 ppm, le besoin théorique initial est d'environ **2,32 kg** ; cette valeur n’autorise pas à verser les 2,32 kg sans contrôle.
@@ -131,7 +131,7 @@ Le programme calcule la masse de NaHCO3 nécessaire, mais ne prépare qu'un **lo
 Ajouter uniquement le lot affiché en poudre devant les buses, avec filtration, selon l'étiquette du produit. Attendre au minimum **4 heures** de circulation avant de mesurer pH et TAC :
 
 ```bash
-uv run piscine-ph measure-tac --ph 6.15 --tac 80
+piscine-ph measure-tac --ph 6.15 --tac 80
 ```
 
 Si le TAC mesuré est sous 80 ppm, le programme reste à l'étape TAC. Refaire `plan-tac` avec la nouvelle mesure : il recalcule le besoin restant et prépare un nouveau lot de 1 kg maximum. Ne jamais confirmer un lot partiellement versé comme s'il avait été versé en totalité.
@@ -143,8 +143,8 @@ Le passage à l'ajustement final n'est autorisé que lorsque le TAC saisi est su
 Une fois le TAC confirmé, reprendre le cycle :
 
 ```bash
-uv run piscine-ph dose --naoh-ml 50
-uv run piscine-ph measure --ph 7.05 --tac 80
+piscine-ph dose --naoh-ml 50
+piscine-ph measure --ph 7.05 --tac 80
 ```
 
 Les doses 250/100/50 mL sont seulement indicatives. Le choix réel doit tenir compte de la remontée de pH mesurée lors de la dose précédente. Lorsque le pH mesuré atteint ou dépasse 7,2, le protocole est marqué terminé et archivé.
@@ -208,7 +208,7 @@ data/protocoles/protocole_YYYYMMDD_HHMMSS.json
 Le fichier contient la configuration, l'étape active, toutes les doses, les mesures, les contrôles de cohérence et les événements horodatés. Afficher toutes les archives :
 
 ```bash
-uv run piscine-ph history
+piscine-ph history
 ```
 
 Le champ `cumulative_additions` récapitule les produits effectivement enregistrés : `naoh_solution_ml`, `naoh_moles`, `bicarbonate_kg`, `bicarbonate_moles` et les contributions théoriques correspondantes au TAC. Une dose préparée puis annulée n'est pas incluse.

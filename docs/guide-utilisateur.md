@@ -21,177 +21,57 @@ Ne pas utiliser la piscine pendant la correction. La soude est corrosive : ajout
 
 Le projet demande Python 3.11 ou plus récent et l'outil `uv`. Même si Python n'est pas installé sur l'ordinateur, `uv` peut télécharger et gérer une version de Python adaptée : il n'est donc pas nécessaire d'installer Python séparément dans le cas normal. [Documentation officielle uv](https://docs.astral.sh/uv/guides/install-python/)
 
-### 1. Ouvrir un terminal dans le dossier du projet
+### macOS ou Linux
 
-Le dossier du projet doit contenir les fichiers `pyproject.toml`, `uv.lock` et le dossier `src`.
-
-Sur macOS ou Linux, ouvrir **Terminal** puis, par exemple :
+Ouvrir **Terminal**, puis exécuter une seule commande :
 
 ```bash
-cd ~/Downloads/rectificationph
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/main/install.sh | sh
 ```
 
-Sous Windows, ouvrir **PowerShell** puis, par exemple :
+Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Démarrer ensuite l'application depuis n'importe quel dossier :
+
+```bash
+piscine-ph start
+```
+
+### Windows 10 ou 11
+
+Ouvrir **PowerShell**, puis exécuter une seule commande :
 
 ```powershell
-cd "$HOME\Downloads\rectificationph"
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/main/install.ps1 | iex
 ```
 
-Adapter le chemin si le projet a été enregistré ailleurs.
-
-### 2. Vérifier ou installer uv
-
-Commencer par vérifier si `uv` est déjà disponible :
-
-```bash
-uv --version
-```
-
-Si une version s'affiche, passer directement à l'étape 3.
-
-Sinon, utiliser **une seule** des méthodes ci-dessous. Les commandes proposées proviennent de la [documentation officielle d'installation de uv](https://docs.astral.sh/uv/getting-started/installation/).
-
-#### macOS
-
-Dans Terminal :
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Fermer puis rouvrir Terminal, puis vérifier :
-
-```bash
-uv --version
-```
-
-Si Homebrew est déjà installé, cette variante convient aussi :
-
-```bash
-brew install uv
-```
-
-#### Windows 10 ou 11
-
-Dans PowerShell :
+Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Démarrer ensuite l'application :
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Fermer puis rouvrir PowerShell, puis vérifier :
-
-```powershell
-uv --version
-```
-
-Si `winget` est déjà installé, cette variante convient aussi :
-
-```powershell
-winget install --id=astral-sh.uv -e
-```
-
-#### Linux
-
-Dans un terminal :
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Fermer puis rouvrir le terminal, puis vérifier :
-
-```bash
-uv --version
-```
-
-Avant d'exécuter un script téléchargé, il est possible de l'inspecter avec `curl -LsSf https://astral.sh/uv/install.sh | less`. Si l'ordinateur est administré par une organisation, demander d'abord l'autorisation ou utiliser la méthode de paquets approuvée.
-
-### 3. Installer Python géré par uv
-
-Le projet exige Python 3.11 au minimum. Installer Python 3.13, version stable compatible recommandée pour ce projet :
-
-```bash
-uv python install 3.13
-```
-
-Vérifier que la version est disponible :
-
-```bash
-uv python list --only-installed
-```
-
-`uv sync` peut aussi télécharger Python automatiquement s'il manque, mais cette étape explicite rend l'installation plus lisible. Pour ce projet, Python est donc installé et géré par `uv` ; aucune installation Python séparée n'est nécessaire.
-
-### 4. Installer les dépendances du projet
-
-Toujours dans le dossier du projet, lancer :
-
-```bash
-uv sync
-```
-
-Cette commande crée l'environnement isolé `.venv/` et installe les bibliothèques nécessaires ; elle ne modifie pas le Python global de l'ordinateur.
-
-### 5. Vérifier et démarrer
-
-Vérifier que l'application est disponible :
-
-```bash
-uv run piscine-ph --help
-```
-
-Puis créer ou reprendre le protocole :
-
-```bash
-uv run piscine-ph start
+piscine-ph start
 ```
 
 ### En cas de problème
 
-- `uv : commande introuvable` : fermer totalement le terminal, l'ouvrir à nouveau et refaire `uv --version`. L'installateur ajoute normalement `uv` au `PATH` du compte utilisateur.
-- `Python introuvable` : lancer `uv python install 3.13`, puis `uv sync`.
+- `uv : commande introuvable` : relancer la commande d'installation ci-dessus. Elle installe `uv` pour le compte utilisateur.
+- `piscine-ph : commande introuvable` : fermer totalement le terminal, l'ouvrir à nouveau, puis réessayer. L'installateur ajoute normalement le répertoire des outils au `PATH`.
+- `Python introuvable` : relancer la commande d'installation ; `uv` téléchargera une version compatible.
 - Erreur de réseau : reconnecter l'ordinateur puis relancer la même commande ; `uv` reprendra les téléchargements nécessaires.
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
-- Le dossier n'est pas trouvé : revenir à l'étape 1 et vérifier son emplacement avec l'explorateur de fichiers.
+- L'application ne nécessite pas de dossier de projet local.
 
 ## Modifier les valeurs proposées par défaut
 
-Les valeurs affichées par défaut au démarrage — volume, pH de départ, objectifs pH/TAC, concentration de soude, volume du seau et tailles indicatives des apports — sont regroupées dans :
+Les valeurs proposées au démarrage servent seulement de repères. À la création d'un nouveau protocole, le questionnaire permet de les remplacer par les mesures et caractéristiques réelles du bassin. Chaque archive conserve ses propres paramètres ; elle n'est jamais modifiée par une future mise à jour de l'application.
 
-```text
-src/piscine_ph/defaults.json
-```
+Pour une exécution sans questionnaire, les options de `start`, comme `--volume-m3 46`, remplacent les valeurs proposées. Les réglages internes fournis avec l'application sont documentés dans la [documentation de configuration](configuration.md) et concernent le développement du projet.
 
-L'utilisateur peut modifier ce fichier avec un éditeur de texte avant de créer un nouveau protocole. Par exemple, pour un bassin de 35 m3 et un seau de 12 L, modifier seulement les nombres concernés :
-
-```json
-"pool_volume_m3": 35.0,
-"bucket_volume_l": 12.0
-```
-
-Conserver impérativement la structure JSON : guillemets autour des noms, virgules entre les lignes et point pour les décimales. Ne pas modifier `schema_version`.
-
-Les clés, unités et conséquences de chaque réglage sont expliquées dans la [documentation de configuration](configuration.md). Les constantes chimiques, tolérances et protections du seau ne se trouvent volontairement pas dans ce fichier ; elles ne doivent pas être modifiées pour adapter un bassin.
-
-Après l'enregistrement, relancer la commande :
-
-```bash
-uv run piscine-ph start
-```
-
-La modification n'agit que sur un **nouveau** protocole. Chaque archive conserve ses propres paramètres dans son fichier JSON : elle n'est jamais réécrite par un changement de `defaults.json`.
-
-Les options données directement à la commande `start`, par exemple `--volume-m3 46`, restent prioritaires sur les valeurs du fichier JSON.
-
-Si un protocole est actif, `start` le reprend et n'applique donc pas les nouveaux réglages. Terminer ou annuler le protocole actif, puis lancer `start` ; ou utiliser explicitement `uv run piscine-ph start --force` pour créer une nouvelle archive sans supprimer l'ancienne.
+Si un protocole est actif, `start` le reprend et n'applique donc pas de nouveaux paramètres. Terminer ou annuler le protocole actif, puis lancer `start` ; ou utiliser explicitement `piscine-ph start --force` pour créer une nouvelle archive sans supprimer l'ancienne.
 
 ## Démarrer un protocole
 
 Pour utiliser les valeurs prévues pour le bassin de 46 m3 :
 
 ```bash
-uv run piscine-ph start
+piscine-ph start
 ```
 
 Pour tout **nouveau** protocole, cette commande ouvre un questionnaire. Il demande et archive : volume, pH et TAC réellement mesurés, paliers pH, concentration de soude, traitement de désinfection et, si utile, le CYA. Valider une valeur proposée n'est approprié que si elle correspond bien au bassin et au produit du jour.
@@ -209,13 +89,13 @@ La concentration ne possède pas de réponse par défaut dans le questionnaire :
 Ne lancez ni `start --force`, ni un nouveau protocole pour cela : les mesures et apports précédents seraient séparés de leur historique. Vérifiez d'abord l'état avec :
 
 ```bash
-uv run piscine-ph status
+piscine-ph status
 ```
 
 S'il existe une **dose de NaOH en attente**, confirmez-la avec sa mesure si elle a été versée, ou annulez-la seulement si elle n'a pas été versée. Ensuite, pour le même bidon employé depuis le début, lancez :
 
 ```bash
-uv run piscine-ph configure-naoh
+piscine-ph configure-naoh
 ```
 
 Le questionnaire de cette commande demande de nouveau l'unité. Pour la lessive de soude du FDS étudié ici, choisir `% m/m`, saisir `30` puis la densité `1,33` : l'application archive et emploie `399 g/L` (soit environ `400 g/L`). Les volumes déjà versés et les mesures restent intacts ; le cumul en moles de NaOH et les contrôles théoriques sont recalculés avec cette concentration, et la modification est inscrite dans le journal JSON.
@@ -229,28 +109,28 @@ Le test TAC utilisé ici se lit par paliers de 10 ppm. Saisir uniquement des val
 Pour une exécution automatisée ou sans questionnaire, utiliser `--no-guided` et fournir explicitement les paramètres, en particulier la concentration de soude :
 
 ```bash
-uv run piscine-ph start --no-guided --volume-m3 46 --initial-ph 4.0 --initial-tac 30 --bucket-l 10 --naoh-g-l 400
+piscine-ph start --no-guided --volume-m3 46 --initial-ph 4.0 --initial-tac 30 --bucket-l 10 --naoh-g-l 400
 ```
 
 Le programme crée un fichier de suivi daté dans `data/protocoles/`. Il conserve les mesures et reprend automatiquement le dernier protocole non terminé.
 
-Dès la création, il affiche et archive un **approvisionnement indicatif** : stock prudent de soude à la concentration confirmée dans le questionnaire et quantité de bicarbonate calculée depuis le TAC initial, avec une marge d'achat. Ce n'est pas une instruction de verser ces quantités : chaque apport reste soumis aux mesures pH/TAC intermédiaires. La même information est visible ensuite avec `uv run piscine-ph status`.
+Dès la création, il affiche et archive un **approvisionnement indicatif** : stock prudent de soude à la concentration confirmée dans le questionnaire et quantité de bicarbonate calculée depuis le TAC initial, avec une marge d'achat. Ce n'est pas une instruction de verser ces quantités : chaque apport reste soumis aux mesures pH/TAC intermédiaires. La même information est visible ensuite avec `piscine-ph status`.
 
 ### Cas particulier : électrolyse arrêtée et galets stabilisés
 
 Si la cellule est arrêtée pour maintenance et que la désinfection temporaire est assurée par des galets stabilisés, déclarer ce contexte dès le début :
 
 ```bash
-uv run piscine-ph start --electrolysis arretee --chlorine galets_stabilises
+piscine-ph start --electrolysis arretee --chlorine galets_stabilises
 ```
 
-Si le protocole existe déjà, utiliser à la place `uv run piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
+Si le protocole existe déjà, utiliser à la place `piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
 
 Le calcul théorique du TAC reste disponible, mais la prévision de pH devient indicative car les galets acidifient l'eau et apportent du CYA. Journaliser les galets et chaque mesure de stabilisant :
 
 ```bash
-uv run piscine-ph record-tablets --count 2 --unit-mass-g 200 --product "galets trichlore 200 g"
-uv run piscine-ph measure-cya --cya 35
+piscine-ph record-tablets --count 2 --unit-mass-g 200 --product "galets trichlore 200 g"
+piscine-ph measure-cya --cya 35
 ```
 
 La procédure complète, les seuils d'alerte, les contrôles à effectuer et le retour à l'électrolyse sont détaillés dans le [guide de traitement temporaire au chlore stabilisé](traitement-chlore-stabilise.md).
@@ -260,7 +140,7 @@ Le JSON enregistre aussi le cumul des produits effectivement versés : volume et
 Si un protocole est déjà en cours, `start` le reprend et affiche son étape actuelle. Pour créer volontairement un nouveau protocole, sans supprimer l'ancien :
 
 ```bash
-uv run piscine-ph start --force
+piscine-ph start --force
 ```
 
 ## Consulter l'étape en cours
@@ -268,12 +148,12 @@ uv run piscine-ph start --force
 À tout moment :
 
 ```bash
-uv run piscine-ph status
+piscine-ph status
 ```
 
 La commande affiche le dernier pH, le dernier TAC, l'étape active et une éventuelle dose en attente.
 
-Lancer à nouveau `uv run piscine-ph start` est également possible : la commande reprend le protocole actif, sans le recréer.
+Lancer à nouveau `piscine-ph start` est également possible : la commande reprend le protocole actif, sans le recréer.
 
 Après chaque commande, l'application affiche aussi `Commande suivante : ...` avec la commande adaptée à l'étape active.
 
@@ -282,7 +162,7 @@ Après chaque commande, l'application affiche aussi `Commande suivante : ...` av
 Pour ne pas retenir les commandes, utiliser le menu :
 
 ```bash
-uv run piscine-ph menu
+piscine-ph menu
 ```
 
 Le menu affiche l'étape active et propose seulement l'action logique suivante. Il s'arrête lorsqu'une action physique doit être réalisée : ajout de soude ou bicarbonate, circulation, puis mesure dans le bassin. Relancer `menu` après la mesure pour continuer.
@@ -292,13 +172,13 @@ Le menu affiche l'étape active et propose seulement l'action logique suivante. 
 Préparer une dose de soude :
 
 ```bash
-uv run piscine-ph dose
+piscine-ph dose
 ```
 
 Le programme affiche l'eau et le volume de soude à mettre dans le seau. Pour modifier la dose proposée :
 
 ```bash
-uv run piscine-ph dose --naoh-ml 100
+piscine-ph dose --naoh-ml 100
 ```
 
 Avec un seau de 10 L et 250 mL de soude, le programme demande 7,75 L d'eau puis 250 mL de soude. Il garde 2 L de marge dans le seau.
@@ -313,13 +193,13 @@ Après mélange prudent :
 Exemple :
 
 ```bash
-uv run piscine-ph measure --ph 5.20 --tac 50
+piscine-ph measure --ph 5.20 --tac 50
 ```
 
 Si la dose a ete preparee dans l'application mais **n'a pas ete versee** dans le bassin, l'annuler avant toute nouvelle dose :
 
 ```bash
-uv run piscine-ph cancel-dose
+piscine-ph cancel-dose
 ```
 
 La commande demande une confirmation, supprime uniquement la dose en attente et conserve les mesures precedentes. Ne jamais l'utiliser si la soude a deja ete versee : dans ce cas, mesurer pH et TAC puis utiliser `measure`.
@@ -329,7 +209,7 @@ La commande demande une confirmation, supprime uniquement la dose en attente et 
 Si le produit a bien ete versé mais que le pH ou le TAC saisi est erroné, corriger la dernière mesure sans retirer le produit du cumul :
 
 ```bash
-uv run piscine-ph correct-last-measurement --ph 4.5 --tac 50
+piscine-ph correct-last-measurement --ph 4.5 --tac 50
 ```
 
 Cette commande recalcule le contrôle de cohérence et replace le protocole à la bonne étape. Elle ne fonctionne pas si une dose suivante est déjà préparée : annuler d'abord cette dose avec `cancel-dose`.
@@ -339,7 +219,7 @@ Cette commande recalcule le contrôle de cohérence et replace le protocole à l
 Pour abandonner le protocole actif sans perdre son historique :
 
 ```bash
-uv run piscine-ph cancel-protocol
+piscine-ph cancel-protocol
 ```
 
 La commande demande une confirmation, marque le protocole comme `annule` et conserve son fichier JSON dans `data/protocoles/`. Elle ne supprime aucune mesure.
@@ -347,7 +227,7 @@ La commande demande une confirmation, marque le protocole comme `annule` et cons
 Créer ensuite le nouveau protocole :
 
 ```bash
-uv run piscine-ph start
+piscine-ph start
 ```
 
 Il est aussi possible d'utiliser `start --force`, mais `cancel-protocol` est préférable lorsqu'un protocole doit clairement être abandonné dans l'historique.
@@ -359,7 +239,7 @@ Répéter `dose`, puis `measure` jusqu'à atteindre pH 6,0. Les doses de 250, 10
 Lorsque pH 6 est atteint, mesurer le TAC et demander le calcul de bicarbonate :
 
 ```bash
-uv run piscine-ph plan-tac --tac 50
+piscine-ph plan-tac --tac 50
 ```
 
 Le programme indique le besoin total théorique, mais prépare **un seul lot de 1 kg maximum**. Ajouter uniquement ce lot en poudre près des buses, filtration en marche, selon les consignes du produit. Attendre au minimum **4 heures** de circulation avant de mesurer pH et TAC — davantage si le cycle complet de filtration de votre bassin est plus long. Ne pas ajouter un second lot avant cette mesure. Une fiche produit bicarbonate comparable indique elle aussi environ quatre heures pour une circulation complète. [Leslie’s Alkalinity Up](https://lesliespool.com/leslies-alkalinity-up-2-lbs/48051.html)
@@ -367,7 +247,7 @@ Le programme indique le besoin total théorique, mais prépare **un seul lot de 
 Après dissolution et circulation, mesurer à nouveau pH et TAC puis saisir :
 
 ```bash
-uv run piscine-ph measure-tac --ph 6.15 --tac 80
+piscine-ph measure-tac --ph 6.15 --tac 80
 ```
 
 Si le TAC est inférieur à 80 ppm, recommencer `plan-tac` avec la nouvelle mesure : le programme recalcule alors le besoin restant et prépare au plus 1 kg supplémentaire. Le programme ne passe pas à l'étape finale avant confirmation d'un TAC d'au moins 80 ppm.
@@ -377,8 +257,8 @@ Si le TAC est inférieur à 80 ppm, recommencer `plan-tac` avec la nouvelle mesu
 Reprendre les petites doses de soude :
 
 ```bash
-uv run piscine-ph dose --naoh-ml 50
-uv run piscine-ph measure --ph 7.05 --tac 80
+piscine-ph dose --naoh-ml 50
+piscine-ph measure --ph 7.05 --tac 80
 ```
 
 Continuer jusqu'à pH 7,2. Le programme marque alors le protocole comme terminé.
@@ -401,7 +281,7 @@ Si l'application indique que la prédiction de pH est indisponible, le couple pH
 ## Voir les protocoles précédents
 
 ```bash
-uv run piscine-ph history
+piscine-ph history
 ```
 
 Les fichiers JSON de suivi restent dans `data/protocoles/`. Ils ne sont pas ajoutés à Git.
@@ -411,9 +291,9 @@ Les fichiers JSON de suivi restent dans `data/protocoles/`. Ils ne sont pas ajou
 Pour connaître les options d'une commande :
 
 ```bash
-uv run piscine-ph dose --help
-uv run piscine-ph measure --help
-uv run piscine-ph plan-tac --help
+piscine-ph dose --help
+piscine-ph measure --help
+piscine-ph plan-tac --help
 ```
 
 Pour les détails chimiques et l'architecture du projet, consulter [la documentation technique](protocole_ph_tac.md).

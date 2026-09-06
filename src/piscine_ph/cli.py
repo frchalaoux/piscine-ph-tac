@@ -70,14 +70,14 @@ def show_check(state: ProtocolState) -> None:
 def next_command(state: ProtocolState) -> str:
     """Retourne la commande suivante selon l'etat concret du protocole."""
     if state.step in {ProtocolStep.COMPLETE, ProtocolStep.CANCELLED}:
-        return "uv run piscine-ph history"
+        return "piscine-ph history"
     if state.pending_naoh:
-        return "uv run piscine-ph measure --ph VOTRE_PH --tac VOTRE_TAC"
+        return "piscine-ph measure --ph VOTRE_PH --tac VOTRE_TAC"
     if state.pending_bicarbonate:
-        return "uv run piscine-ph measure-tac --ph VOTRE_PH --tac VOTRE_TAC"
+        return "piscine-ph measure-tac --ph VOTRE_PH --tac VOTRE_TAC"
     if state.step is ProtocolStep.TAC_TO_TARGET:
-        return "uv run piscine-ph plan-tac --tac VOTRE_TAC"
-    return "uv run piscine-ph dose"
+        return "piscine-ph plan-tac --tac VOTRE_TAC"
+    return "piscine-ph dose"
 
 
 def show_next_command(state: ProtocolState) -> None:
@@ -534,7 +534,7 @@ def cancel_protocol() -> None:
     typer.secho(
         "Protocole annule et archive. Vous pouvez en creer un nouveau.", fg=typer.colors.GREEN
     )
-    typer.echo("Commande suivante : uv run piscine-ph start")
+    typer.echo("Commande suivante : piscine-ph start")
 
 
 @app.command("correct-last-measurement")
@@ -618,7 +618,7 @@ def menu() -> None:
     try:
         state = protocol_service.active()
     except ValueError as error:
-        typer.echo(f"{error} Lancez : uv run piscine-ph start")
+        typer.echo(f"{error} Lancez : piscine-ph start")
         raise typer.Exit(1)
 
     typer.secho("GUIDE DU PROTOCOLE", fg=typer.colors.GREEN, bold=True)

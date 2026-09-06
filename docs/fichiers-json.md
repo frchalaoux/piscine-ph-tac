@@ -12,7 +12,7 @@ L’application emploie deux familles de fichiers JSON : un fichier de **paramè
 
 Une archive est écrite de façon atomique : l’application écrit d’abord un fichier temporaire puis le remplace. Une archive JSON invalide est ignorée lors de la recherche du protocole actif ; elle n’est pas supprimée automatiquement.
 
-Le protocole actif est l’archive valide la plus récente, selon son nom, dont `step` n’est ni `termine` ni `annule`. La commande `uv run piscine-ph history` liste les archives lisibles ; `uv run piscine-ph status` affiche l’archive active.
+Le protocole actif est l’archive valide la plus récente, selon son nom, dont `step` n’est ni `termine` ni `annule`. La commande `piscine-ph history` liste les archives lisibles ; `piscine-ph status` affiche l’archive active.
 
 ## `defaults.json` : paramètres des nouveaux protocoles
 
