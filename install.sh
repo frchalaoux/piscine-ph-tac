@@ -2,7 +2,8 @@
 # Installe piscine-ph pour le compte courant (macOS ou Linux).
 set -eu
 
-repository_url="git+https://github.com/frchalaoux/piscine-ph-tac.git@main"
+release_version="v0.1.0"
+repository_url="git+https://github.com/frchalaoux/piscine-ph-tac.git@${release_version}"
 
 if command -v uv >/dev/null 2>&1; then
     uv_command="uv"
