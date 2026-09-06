@@ -42,6 +42,14 @@ def project_version() -> str:
     return match.group(1)
 
 
+def current_branch() -> str:
+    """Retourne la branche locale active et refuse un HEAD détaché."""
+    branch = output("git", "branch", "--show-current")
+    if not branch:
+        raise RuntimeError("Une release exige une branche locale active, pas un HEAD détaché.")
+    return branch
+
+
 def replace_exactly_once(path: Path, old: str, new: str) -> None:
     """Remplace une valeur unique et échoue si le fichier n'est pas celui attendu."""
     content = path.read_text()
@@ -68,18 +76,21 @@ def require_tools() -> None:
         raise RuntimeError("Outil(s) manquant(s) : " + ", ".join(missing))
 
 
-def ensure_release_is_possible(tag: str, *, require_clean_tree: bool) -> None:
-    """Contrôle l'état Git et évite d'écraser main ou un tag existant."""
+def ensure_release_is_possible(tag: str, *, require_clean_tree: bool) -> str:
+    """Contrôle l'état Git et évite d'écraser la branche distante ou un tag existant."""
     if require_clean_tree and output("git", "status", "--porcelain"):
         raise RuntimeError("Le répertoire de travail doit être propre avant une release.")
-    run("git", "fetch", "origin", "main", "--tags")
-    merged = run("git", "merge-base", "--is-ancestor", "origin/main", "HEAD", check=False)
+    branch = current_branch()
+    run("git", "fetch", "origin", branch, "--tags")
+    remote_branch = f"origin/{branch}"
+    merged = run("git", "merge-base", "--is-ancestor", remote_branch, "HEAD", check=False)
     if merged.returncode:
-        raise RuntimeError("HEAD doit contenir origin/main avant de publier.")
+        raise RuntimeError(f"HEAD doit contenir {remote_branch} avant de publier.")
     local_tag = run("git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}", check=False)
     remote_tag = run("git", "ls-remote", "--exit-code", "--tags", "origin", tag, check=False)
     if not local_tag.returncode or not remote_tag.returncode:
         raise RuntimeError(f"Le tag {tag} existe déjà.")
+    return branch
 
 
 def release_notes(version: str) -> str:
@@ -101,7 +112,7 @@ def publish(version: str) -> None:
     if version == previous:
         raise RuntimeError(f"La version demandée est déjà {version}.")
     tag = f"v{version}"
-    ensure_release_is_possible(tag, require_clean_tree=True)
+    branch = ensure_release_is_possible(tag, require_clean_tree=True)
     update_version_files(previous, version)
     run("uv", "run", "ruff", "check", ".")
     run("uv", "run", "pytest")
@@ -109,7 +120,7 @@ def publish(version: str) -> None:
     run("git", "diff", "--check")
     run("git", "add", "pyproject.toml", "install.sh", "install.ps1", "README.md", "docs/guide-utilisateur.md")
     run("git", "commit", "-m", f"release: preparer la version {version}")
-    run("git", "push", "origin", "HEAD:main")
+    run("git", "push", "origin", f"HEAD:{branch}")
     run("git", "tag", "-a", tag, "-m", f"Version {version}")
     run("git", "push", "origin", tag)
     run("gh", "release", "create", tag, "--title", f"piscine-ph {tag}", "--notes", release_notes(version))
@@ -132,7 +143,8 @@ def main() -> int:
         else:
             print("Simulation uniquement : aucune modification ni publication.")
             print(f"La publication créerait le tag v{args.version} depuis le commit courant.")
-            ensure_release_is_possible(f"v{args.version}", require_clean_tree=False)
+            branch = ensure_release_is_possible(f"v{args.version}", require_clean_tree=False)
+            print(f"La branche distante ciblée serait origin/{branch}.")
     except (RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Erreur : {error}", file=sys.stderr)
         return 1
