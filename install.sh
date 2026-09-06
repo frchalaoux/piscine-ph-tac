@@ -29,4 +29,8 @@ fi
 "$uv_command" tool install --reinstall "$repository_url"
 
 echo
-echo "piscine-ph est installe. Lancez : piscine-ph start"
+if command -v piscine-ph >/dev/null 2>&1; then
+    echo "piscine-ph est installe. Lancez : piscine-ph start"
+else
+    echo "piscine-ph est installe. Fermez et rouvrez le terminal, puis lancez : piscine-ph start"
+fi

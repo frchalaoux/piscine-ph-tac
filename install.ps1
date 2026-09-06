@@ -22,4 +22,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ""
-Write-Host "piscine-ph est installe. Lancez : piscine-ph start"
+if (Get-Command piscine-ph -ErrorAction SilentlyContinue) {
+    Write-Host "piscine-ph est installe. Lancez : piscine-ph start"
+}
+else {
+    Write-Host "piscine-ph est installe. Fermez et rouvrez PowerShell, puis lancez : piscine-ph start"
+}

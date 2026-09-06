@@ -16,7 +16,7 @@ Sous Windows, ouvrir PowerShell et exécuter :
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/main/install.ps1 | iex
 ```
 
-Ensuite, depuis n'importe quel dossier :
+Ensuite, depuis n'importe quel dossier (rouvrir le terminal après une première installation de `uv`) :
 
 ```bash
 piscine-ph start

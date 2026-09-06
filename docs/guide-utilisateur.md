@@ -29,7 +29,7 @@ Ouvrir **Terminal**, puis exécuter une seule commande :
 curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/main/install.sh | sh
 ```
 
-Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Démarrer ensuite l'application depuis n'importe quel dossier :
+Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir le terminal. Démarrer ensuite l'application depuis n'importe quel dossier :
 
 ```bash
 piscine-ph start
@@ -43,7 +43,7 @@ Ouvrir **PowerShell**, puis exécuter une seule commande :
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/main/install.ps1 | iex
 ```
 
-Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Démarrer ensuite l'application :
+Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
 
 ```powershell
 piscine-ph start
