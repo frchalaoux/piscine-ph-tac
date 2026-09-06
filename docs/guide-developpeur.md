@@ -31,7 +31,7 @@ Ne pas modifier `uv.lock` à la main : utiliser `uv add`, `uv remove` ou `uv loc
 
 ## Publier une version
 
-Le programme `scripts/release.py` remplace la version dans `pyproject.toml`, les deux installateurs et la documentation. Avec `--publish`, il lance les contrôles, construit le paquet, crée le commit, pousse `HEAD` sur `main`, crée le tag annoté et publie la release GitHub.
+Le programme `scripts/release.py` remplace la version dans `pyproject.toml`, les deux installateurs et la documentation. Avec `--publish`, il lance les contrôles, construit le paquet, crée le commit, pousse `HEAD` vers la branche distante portant le même nom que la branche locale active, crée le tag annoté et publie la release GitHub. Une release lancée depuis `staging` met donc à jour `origin/staging`, jamais `origin/main`.
 
 Depuis un répertoire de travail propre, simuler d'abord la version suivante :
 
@@ -45,7 +45,7 @@ Puis la publier :
 uv run python scripts/release.py 0.1.1 --publish
 ```
 
-Le programme exige `git`, `gh` authentifié et `uv`. Il refuse de publier si `main` distante n'est pas comprise dans le commit courant ou si le tag existe déjà.
+Le programme exige `git`, `gh` authentifié et `uv`. Il refuse de publier si la branche distante correspondante n'est pas comprise dans le commit courant ou si le tag existe déjà.
 
 ## Organisation du code
 
