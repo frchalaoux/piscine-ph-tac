@@ -175,6 +175,16 @@ def prompt_naoh_concentration() -> tuple[
     """Guide la conversion de l'étiquette vers la seule unité utilisée par le modèle."""
     typer.secho("SOUDE — CONCENTRATION", fg=typer.colors.CYAN, bold=True)
     typer.echo("Utiliser l'etiquette ou la FDS ; le poids du bidon plein seul ne suffit pas.")
+    typer.echo("Repere de lecture — exemples seulement, pas des valeurs par defaut :")
+    typer.echo("  - '300 g/L' : choisir 1 et saisir 300.")
+    typer.echo("  - '30 % m/m' avec densite '1,33 g/mL' : choisir 2, saisir 30 puis 1,33.")
+    typer.echo("    Le programme calculera alors 399 g/L.")
+    typer.echo("  - '30 % m/v' : choisir 3 et saisir 30 ; cela correspond a 300 g/L.")
+    typer.secho(
+        "Si l'unite ou la densite n'est pas indiquee, arretez-vous et consultez la FDS du produit ; "
+        "ne la devinez pas.",
+        fg=typer.colors.YELLOW,
+    )
     choice = prompted_choice(
         "Comment la concentration est-elle indiquee ?",
         [
@@ -184,11 +194,13 @@ def prompt_naoh_concentration() -> tuple[
         ],
     )
     if choice == 1:
-        concentration = typer.prompt("Concentration NaOH en g/L", type=float)
+        concentration = typer.prompt("Concentration NaOH en g/L (etiquette ou FDS)", type=float)
         return concentration, NaOHConcentrationSource.GRAMS_PER_LITRE, None, None
-    percent = typer.prompt("Pourcentage de NaOH", type=float)
+    percent = typer.prompt("Pourcentage de NaOH indique sur l'etiquette", type=float)
     if choice == 2:
-        density = typer.prompt("Densite en g/mL (a la temperature indiquee par la FDS)", type=float)
+        density = typer.prompt(
+            "Densite en g/mL indiquee par la FDS (ne pas deviner)", type=float
+        )
         concentration = percent * density * 10
         typer.secho(
             f"Conversion retenue : {percent:.1f} % m/m x {density:.3f} g/mL = "

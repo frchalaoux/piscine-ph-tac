@@ -82,7 +82,7 @@ Pour la soude, le questionnaire ne demande jamais le poids total du bidon : ce p
 - `% m/m` et densité en `g/mL` : `g/L = % × densité × 10` ; par exemple 30 % m/m à 1,33 g/mL donne 399 g/L ;
 - `% m/v` : `g/L = % × 10` ; par exemple 30 % m/v donne 300 g/L.
 
-La concentration ne possède pas de réponse par défaut dans le questionnaire : elle doit être saisie depuis l'étiquette ou la FDS. Les réponses sont figées dans l'archive, notamment `config.naoh_concentration_g_l` et son origine. Cela évite de confondre une soude à 30 % massique avec une solution à 300 g/L.
+La concentration ne possède pas de réponse par défaut dans le questionnaire : elle doit être saisie depuis l'étiquette ou la FDS. Le programme rappelle à l'écran les exemples `300 g/L`, `30 % m/m` avec une densité de `1,33 g/mL` (soit `399 g/L`) et `30 % m/v` (soit `300 g/L`). Ces exemples servent à reconnaître l'unité ; ils ne doivent pas être repris si l'étiquette indique autre chose. En cas d'unité ou de densité absente, arrêter le questionnaire et consulter la FDS du produit. Les réponses sont figées dans l'archive, notamment `config.naoh_concentration_g_l` et son origine. Cela évite de confondre une soude à 30 % massique avec une solution à 300 g/L.
 
 ### Corriger la soude d'un protocole déjà commencé
 
