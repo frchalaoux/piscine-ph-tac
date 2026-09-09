@@ -15,21 +15,27 @@ Le dépôt public est [frchalaoux/piscine-ph-tac](https://github.com/frchalaoux/
 ## État Git à reprendre
 
 - Branche locale active : `staging`.
-- `staging` et `origin/staging` pointent sur `5b5bfd9` (`version adjustement`).
+- `staging` pointe sur `a721f2d` (`docs: ajouter le handoff et la piste carbonate`) et est en avance d'un commit sur `origin/staging`, qui pointe sur `5b5bfd9` (`version adjustement`).
 - `main` locale et `origin/main` pointent sur `f0ce158`, merge de la PR n° 6 depuis `staging` ; `main` contient donc l'état publié de `staging` à ce moment.
 - Tags/releases publiés : `v0.1.0` et `v0.1.1`.
 - La release actuelle est [v0.1.1](https://github.com/frchalaoux/piscine-ph-tac/releases/tag/v0.1.1).
 
-### Arbre de travail volontairement non commité
+### Release `v0.1.2` interrompue
 
-Les éléments suivants ont été ajoutés/modifiés pour préparer une évolution future et ce handoff :
+Une première tentative de `uv run python scripts/release.py 0.1.2 --publish` a mis à jour les six fichiers de release, puis s'est arrêtée après `git diff --check`, avant le `git add` et le commit. Aucun tag `v0.1.2` ni release n'a été créé.
 
-- `docs/evolution-carbonate-sodium.md` — nouveau ;
-- `docs/guide-developpeur.md` — lien vers cette note ;
-- `tasks/branches/staging.md` — mémo opérationnel de branche ;
-- `handoff.md` — ce fichier.
+Les six modifications attendues restent locales :
 
-Ils ne modifient pas le comportement de la CLI. Les relire, puis les commiter séparément si le propriétaire le souhaite. Ne pas les supprimer ou les écraser sans décision explicite.
+- `pyproject.toml` ;
+- `uv.lock` ;
+- `install.sh` et `install.ps1` ;
+- `README.md` et `docs/guide-utilisateur.md`.
+
+`scripts/release.py` et `docs/guide-developpeur.md` contiennent aussi une correction locale : le script indexe désormais `uv.lock`, contrôle l'index et propose `--resume`. Commiter ce correctif séparément avant de reprendre la release, sans ajouter les six fichiers de release, puis lancer :
+
+```bash
+uv run python scripts/release.py 0.1.2 --publish --resume
+```
 
 ## Installation utilisateur
 
@@ -103,6 +109,6 @@ La dernière validation fonctionnelle enregistrée a donné : Ruff OK et 20 test
 
 ## Prochaine action recommandée
 
-1. Relire et choisir de commiter les quatre documents non commités listés plus haut sur `staging`.
-2. Ne commencer l'implémentation du carbonate que dans un chantier distinct, avec des mesures/attentes chimiques explicites et des tests dédiés.
-3. Pour une future release, partir d'un arbre propre et utiliser `scripts/release.py` depuis la branche qui doit recevoir la release ; passer par PR pour mettre à jour `main`.
+1. Commiter/pousser le correctif de `scripts/release.py` et de la documentation développeur, en laissant les six fichiers de `v0.1.2` non indexés.
+2. Reprendre `v0.1.2` avec `--publish --resume` ; vérifier le journal jusqu'à `gh release create`.
+3. Ne commencer l'implémentation du carbonate que dans un chantier distinct, avec des mesures/attentes chimiques explicites et des tests dédiés.

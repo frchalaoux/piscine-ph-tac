@@ -47,6 +47,33 @@ uv run python scripts/release.py 0.1.1 --publish
 
 Le programme exige `git`, `gh` authentifié et `uv`. Il refuse de publier si la branche distante correspondante n'est pas comprise dans le commit courant ou si le tag existe déjà.
 
+### Fichiers inclus et journal attendu
+
+Le script commence avec un répertoire de travail propre. Il modifie et indexe **uniquement** les fichiers suivants :
+
+```text
+pyproject.toml
+uv.lock
+install.sh
+install.ps1
+README.md
+docs/guide-utilisateur.md
+```
+
+`uv.lock` est inclus parce que `uv run` peut le mettre à jour après le changement de version. Les archives construites dans `dist/` restent ignorées par Git. Les notes de travail, handoffs et autres fichiers de documentation ne sont jamais ajoutés automatiquement : leur inclusion doit rester une décision explicite.
+
+Après `git diff --check`, la sortie doit impérativement afficher, dans cet ordre, `git add`, `git diff --cached --check`, `git commit`, les pushes, le tag puis `gh release create`. Si le journal s'arrête avant `git add`, la release n'a pas été committée ni publiée ; vérifier `git status`, `git log` et les tags avant toute nouvelle tentative.
+
+### Reprendre une release interrompue
+
+Si une interruption est survenue après la mise à jour des six fichiers ci-dessus mais avant le commit, vérifier d'abord qu'aucun autre fichier n'est modifié. Après avoir commité séparément tout correctif nécessaire au script lui-même, reprendre avec :
+
+```bash
+uv run python scripts/release.py 0.1.2 --publish --resume
+```
+
+Le mode `--resume` exige que `pyproject.toml` porte déjà `0.1.2` et refuse tout fichier modifié hors de la liste de release. Il relance les validations, indexe les six fichiers, crée le commit de release, puis poursuit le push, le tag et la release GitHub.
+
 ## Évolutions en attente
 
 La note [sur le carbonate de sodium (pH+)](evolution-carbonate-sodium.md) conserve la comparaison avec la lessive de soude et le bicarbonate, les prix de référence, les limites de sécurité et le plan d'implémentation. Ne pas ajouter ce produit au calcul actuel sans suivre les prérequis listés dans cette note.
