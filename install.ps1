@@ -1,7 +1,7 @@
 # Installe piscine-ph pour le compte courant (Windows PowerShell).
 $ErrorActionPreference = "Stop"
 
-$releaseVersion = "v0.1.1"
+$releaseVersion = "v0.1.2"
 $repositoryUrl = "git+https://github.com/frchalaoux/piscine-ph-tac.git@$releaseVersion"
 
 if (Get-Command uv -ErrorAction SilentlyContinue) {
