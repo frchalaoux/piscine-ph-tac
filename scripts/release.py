@@ -162,9 +162,11 @@ def publish(version: str, *, resume: bool) -> None:
     has_release_changes = stage_release_files(allow_empty=resume)
     if has_release_changes:
         run("git", "commit", "-m", f"release: preparer la version {version}")
-        run("git", "push", "origin", f"HEAD:{branch}")
     else:
         print("Les fichiers de version sont déjà committés ; reprise depuis HEAD.")
+    # Même lors d'une reprise sans nouveau commit, HEAD doit être publié sur
+    # la branche distante avant de rendre le tag public.
+    run("git", "push", "origin", f"HEAD:{branch}")
     run("git", "tag", "-a", tag, "-m", f"Version {version}")
     run("git", "push", "origin", tag)
     run("gh", "release", "create", tag, "--title", f"piscine-ph {tag}", "--notes", release_notes(version))
