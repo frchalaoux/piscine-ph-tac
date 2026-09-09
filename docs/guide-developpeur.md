@@ -31,21 +31,69 @@ Ne pas modifier `uv.lock` à la main : utiliser `uv add`, `uv remove` ou `uv loc
 
 ## Publier une version
 
-Le programme `scripts/release.py` remplace la version dans `pyproject.toml`, les deux installateurs et la documentation. Avec `--publish`, il lance les contrôles, construit le paquet, crée le commit, pousse `HEAD` vers la branche distante portant le même nom que la branche locale active, crée le tag annoté et publie la release GitHub. Une release lancée depuis `staging` met donc à jour `origin/staging`, jamais `origin/main`.
-
-Depuis un répertoire de travail propre, simuler d'abord la version suivante :
-
-```bash
-uv run python scripts/release.py 0.1.1
-```
-
-Puis la publier :
-
-```bash
-uv run python scripts/release.py 0.1.1 --publish
-```
+Une version se prépare et se publie depuis la branche de travail courante, normalement `staging`. Le script ne modifie jamais la branche locale `main` et une publication depuis `staging` cible exclusivement `origin/staging`. Le tag Git est commun au dépôt, mais il pointe sur le commit de `staging` publié ; il ne fusionne pas cette branche dans `main`. La mise à jour de `main` se fait ensuite par une pull request sur GitHub.
 
 Le programme exige `git`, `gh` authentifié et `uv`. Il refuse de publier si la branche distante correspondante n'est pas comprise dans le commit courant ou si le tag existe déjà.
+
+### Cas normal : laisser `--publish` faire toute la release
+
+Ne modifier, n'indexer ni ne committer aucun des fichiers de version à la main. Partir d'un répertoire de travail propre sur la branche visée, par exemple `staging` :
+
+```bash
+git status --short
+git switch staging
+git pull --ff-only origin staging
+uv run python scripts/release.py 0.1.2
+uv run python scripts/release.py 0.1.2 --publish
+```
+
+La première commande Python est une simulation : elle ne modifie aucun fichier. La seconde exécute, dans cet ordre, les contrôles, la mise à jour des fichiers, la construction, le commit `release: preparer la version 0.1.2`, le push vers `origin/staging`, le tag annoté `v0.1.2`, son push, puis la release GitHub. C'est le parcours à privilégier.
+
+### Fichiers inclus et journal attendu
+
+Le script commence avec un répertoire de travail propre. Il modifie et indexe **uniquement** les fichiers suivants :
+
+```text
+pyproject.toml
+uv.lock
+install.sh
+install.ps1
+README.md
+docs/guide-utilisateur.md
+```
+
+`uv.lock` est inclus parce que `uv run` peut le mettre à jour après le changement de version. Les archives construites dans `dist/` restent ignorées par Git. Les notes de travail, handoffs et autres fichiers de documentation ne sont jamais ajoutés automatiquement : leur inclusion doit rester une décision explicite.
+
+Après `git diff --check`, la sortie doit impérativement afficher, dans cet ordre, `git add`, `git diff --cached --check`, `git commit`, les pushes, le tag puis `gh release create`. Si le journal s'arrête avant `git add`, la release n'a pas été committée ni publiée ; vérifier `git status`, `git log` et les tags avant toute nouvelle tentative.
+
+### Cas de reprise : commit et push effectués, mais aucun tag
+
+Ce cas arrive si les six fichiers ont été commités et poussés manuellement (par exemple depuis l'interface de VS Code), ou si le script s'est arrêté après ce commit. Ne créez pas manuellement le tag avec `git tag` ni la release avec `gh release create` : laissez le script terminer les étapes restantes.
+
+Vérifier d'abord que l'arbre est propre, que le commit courant contient bien la version visée et qu'aucun tag n'existe :
+
+```bash
+git status --short
+git log -1 --oneline
+git ls-remote --tags origin v0.1.2
+```
+
+Si la première commande ne produit rien et que la dernière ne produit aucune ligne, reprendre ainsi :
+
+```bash
+uv run python scripts/release.py 0.1.2 --publish --resume
+```
+
+`--resume` exige que `pyproject.toml` porte déjà `0.1.2`. Il relance les contrôles et distingue deux situations :
+
+- les six fichiers sont encore modifiés : il les indexe et crée le commit de release ;
+- ils sont déjà committés : il ne crée pas de deuxième commit et reprend depuis `HEAD`.
+
+Dans les deux cas, il pousse `HEAD` vers la branche distante active (même s'il est déjà à jour), crée et pousse `v0.1.2`, puis publie la release GitHub. Il refuse tout fichier modifié hors de la liste de release.
+
+## Évolutions en attente
+
+La note [sur le carbonate de sodium (pH+)](evolution-carbonate-sodium.md) conserve la comparaison avec la lessive de soude et le bicarbonate, les prix de référence, les limites de sécurité et le plan d'implémentation. Ne pas ajouter ce produit au calcul actuel sans suivre les prérequis listés dans cette note.
 
 ## Organisation du code
 

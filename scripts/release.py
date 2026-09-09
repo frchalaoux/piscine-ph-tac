@@ -20,6 +20,7 @@ VERSION_FILES = (
     ROOT / "README.md",
     ROOT / "docs/guide-utilisateur.md",
 )
+RELEASE_FILES = (ROOT / "pyproject.toml", ROOT / "uv.lock", *VERSION_FILES)
 
 
 def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -30,7 +31,9 @@ def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def output(*command: str) -> str:
     """Retourne la sortie standard d'une commande Git."""
-    return subprocess.check_output(command, cwd=ROOT, text=True).strip()
+    # Ne pas supprimer les espaces initiaux : ``git status --porcelain`` les
+    # utilise pour représenter l'état dans l'index (par exemple ``" M"``).
+    return subprocess.check_output(command, cwd=ROOT, text=True).rstrip()
 
 
 def project_version() -> str:
@@ -67,6 +70,39 @@ def update_version_files(previous: str, current: str) -> None:
         if previous_tag not in content:
             raise RuntimeError(f"Référence {previous_tag!r} absente de {path.relative_to(ROOT)}.")
         path.write_text(content.replace(previous_tag, f"v{current}"), encoding="utf-8")
+
+
+def release_file_names() -> set[str]:
+    """Retourne les chemins relatifs que le script est autorisé à commiter."""
+    return {str(path.relative_to(ROOT)) for path in RELEASE_FILES}
+
+
+def ensure_only_release_files_are_modified() -> None:
+    """Refuse une reprise si elle pourrait capturer une modification étrangère à la release."""
+    modified = {
+        line[3:]
+        for line in output("git", "status", "--porcelain").splitlines()
+        if line
+    }
+    unexpected = modified - release_file_names()
+    if unexpected:
+        raise RuntimeError(
+            "La reprise ne peut inclure que les fichiers de release ; fichiers inattendus : "
+            + ", ".join(sorted(unexpected))
+        )
+
+
+def stage_release_files(*, allow_empty: bool) -> bool:
+    """Indexe les fichiers de release et indique si un commit est nécessaire."""
+    paths = [str(path.relative_to(ROOT)) for path in RELEASE_FILES]
+    run("git", "add", *paths)
+    run("git", "diff", "--cached", "--check")
+    staged = run("git", "diff", "--cached", "--quiet", check=False)
+    if not staged.returncode:
+        if allow_empty:
+            return False
+        raise RuntimeError("Aucune modification de release n'est indexée ; commit annulé.")
+    return True
 
 
 def require_tools() -> None:
@@ -106,20 +142,30 @@ def release_notes(version: str) -> str:
     )
 
 
-def publish(version: str) -> None:
+def publish(version: str, *, resume: bool) -> None:
     """Modifie, vérifie et publie la version demandée."""
     previous = project_version()
-    if version == previous:
+    if resume and version != previous:
+        raise RuntimeError("La reprise exige que pyproject.toml porte déjà la version demandée.")
+    if not resume and version == previous:
         raise RuntimeError(f"La version demandée est déjà {version}.")
     tag = f"v{version}"
-    branch = ensure_release_is_possible(tag, require_clean_tree=True)
-    update_version_files(previous, version)
+    branch = ensure_release_is_possible(tag, require_clean_tree=not resume)
+    if resume:
+        ensure_only_release_files_are_modified()
+    else:
+        update_version_files(previous, version)
     run("uv", "run", "ruff", "check", ".")
     run("uv", "run", "pytest")
     run("uv", "build")
     run("git", "diff", "--check")
-    run("git", "add", "pyproject.toml", "install.sh", "install.ps1", "README.md", "docs/guide-utilisateur.md")
-    run("git", "commit", "-m", f"release: preparer la version {version}")
+    has_release_changes = stage_release_files(allow_empty=resume)
+    if has_release_changes:
+        run("git", "commit", "-m", f"release: preparer la version {version}")
+    else:
+        print("Les fichiers de version sont déjà committés ; reprise depuis HEAD.")
+    # Même lors d'une reprise sans nouveau commit, HEAD doit être publié sur
+    # la branche distante avant de rendre le tag public.
     run("git", "push", "origin", f"HEAD:{branch}")
     run("git", "tag", "-a", tag, "-m", f"Version {version}")
     run("git", "push", "origin", tag)
@@ -133,13 +179,20 @@ def main() -> int:
     parser.add_argument(
         "--publish", action="store_true", help="Applique les modifications et publie la release."
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reprend une release interrompue dont seuls les fichiers de release sont modifiés.",
+    )
     args = parser.parse_args()
     if not VERSION_PATTERN.fullmatch(args.version):
         parser.error("La version doit respecter le format X.Y.Z, par exemple 0.1.1.")
+    if args.resume and not args.publish:
+        parser.error("--resume exige --publish.")
     try:
         require_tools()
         if args.publish:
-            publish(args.version)
+            publish(args.version, resume=args.resume)
         else:
             print("Simulation uniquement : aucune modification ni publication.")
             print(f"La publication créerait le tag v{args.version} depuis le commit courant.")
