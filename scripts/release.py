@@ -31,7 +31,9 @@ def run(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
 
 def output(*command: str) -> str:
     """Retourne la sortie standard d'une commande Git."""
-    return subprocess.check_output(command, cwd=ROOT, text=True).strip()
+    # Ne pas supprimer les espaces initiaux : ``git status --porcelain`` les
+    # utilise pour représenter l'état dans l'index (par exemple ``" M"``).
+    return subprocess.check_output(command, cwd=ROOT, text=True).rstrip()
 
 
 def project_version() -> str:
