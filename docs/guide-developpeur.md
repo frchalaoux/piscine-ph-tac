@@ -95,6 +95,36 @@ Dans les deux cas, il pousse `HEAD` vers la branche distante active (même s'il 
 
 La note [sur le carbonate de sodium (pH+)](evolution-carbonate-sodium.md) conserve la comparaison avec la lessive de soude et le bicarbonate, les prix de référence, les limites de sécurité et le plan d'implémentation. Ne pas ajouter ce produit au calcul actuel sans suivre les prérequis listés dans cette note.
 
+## Tester une commande avant publication
+
+L'entrée de script `piscine-ph` installée globalement par un utilisateur pointe
+sur le tag qu'il a installé. Elle ne reflète pas les modifications non publiées
+du répertoire de travail. Tester les commandes, dont la TUI, depuis le dépôt :
+
+```bash
+uv run piscine-ph tui
+uv run piscine-ph tui --help
+```
+
+Pour tester le comportement d'une installation globale avec le code local :
+
+```bash
+uv tool install --reinstall .
+piscine-ph tui
+```
+
+Cette commande modifie l'environnement d'outils global de la machine ; elle est
+réservée à un poste de développement ou de test. Elle ne remplace ni les tests,
+ni le build, ni la publication. Après une release, l'utilisateur doit installer
+le tag publié avec le script d'installation de cette release ; ne lui demandez
+pas d'installer directement une branche ou un répertoire de développement.
+
+Lorsque `piscine-ph tui` est ajouté, vérifier explicitement les trois niveaux :
+
+1. `uv run piscine-ph tui --help` depuis le dépôt ;
+2. les tests Textual automatisés ;
+3. l'installation depuis le tag de release publié dans un environnement propre.
+
 ## Organisation du code
 
 ```text
@@ -106,15 +136,22 @@ src/piscine_ph/
   repository.py   # Lecture/écriture atomique et recherche des archives
   service.py      # Règles métier et transitions entre étapes
   cli.py          # Commandes et affichage Typer
+  tui.py          # Menus et formulaires Textual, sans règle métier propre
 tests/
   test_chemistry.py
   test_settings.py
   test_service.py
+  test_tui.py
 docs/              # Documentation versionnée
 data/protocoles/   # Journaux opérationnels, ignorés par Git
 ```
 
-Le sens des dépendances doit rester simple : `cli` appelle `service`, `service` utilise `repository`, `chemistry` et `models`. Les calculs chimiques ne doivent pas dépendre de Typer ou du système de fichiers. Cette séparation permet de tester les règles métier sans terminal ni fichiers réels.
+Le sens des dépendances doit rester simple : `cli` et `tui` appellent `service`,
+et `service` utilise `repository`, `chemistry` et `models`. La TUI ne doit
+jamais appeler une commande Typer ou interpréter son texte : elle appelle les
+méthodes du service directement. Les calculs chimiques ne doivent pas dépendre
+de Typer, Textual ou du système de fichiers. Cette séparation permet de tester
+les règles métier sans terminal ni fichiers réels.
 
 ## Documentation du code source
 

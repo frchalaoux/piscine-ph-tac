@@ -21,12 +21,16 @@ from .models import (
     NaOHDoseRecord,
     PendingBicarbonatePlan,
     PendingNaOHDose,
+    PhRegulatorStatus,
     ProtocolConfig,
+    ProtocolMode,
     ProtocolState,
     ProtocolStep,
     StabilizedTabletRecord,
+    StabilizedTabletStatus,
     SupplyEstimate,
     TreatmentContext,
+    WaterMeasurement,
 )
 from .repository import JsonProtocolRepository
 from .settings import SETTINGS
@@ -47,7 +51,7 @@ class ProtocolService:
         state = self.repository.active()
         if state is None:
             raise ValueError("Aucun protocole actif. Lancez d'abord la commande start.")
-        if state.supply_estimate is None:
+        if state.supply_estimate is None and state.config.mode is ProtocolMode.RAISE_PH_TAC:
             state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
             state.add_event("Plan d'approvisionnement genere pour le protocole existant")
             self.repository.save(state)
@@ -87,6 +91,10 @@ class ProtocolService:
             warnings.append(
                 "Electrolyse arretee : la hausse habituelle de pH liee a la cellule n'est plus attendue."
             )
+        if treatment.ph_regulator_status is PhRegulatorStatus.STOPPED:
+            warnings.append(
+                "Regulateur de pH arrete : aucune correction automatique du pH n'est attendue."
+            )
         if (
             treatment.electrolysis_status is ElectrolysisStatus.STOPPED
             and treatment.chlorine_treatment is ChlorineTreatment.STABILIZED_TABLETS
@@ -108,6 +116,80 @@ class ProtocolService:
                     "les galets stabilises."
                 )
         return warnings
+
+    @staticmethod
+    def water_actions(state: ProtocolState) -> list[str]:
+        """Retourne des actions de surveillance, sans jamais calculer une dose.
+
+        Les bornes de chlore sont celles déclarées à la création de l'archive,
+        donc doivent venir de l'étiquette du désinfectant. Le plan n'ordonne ni
+        ajout d'acide ni ajout de chlore : ces produits et leurs dosages restent
+        propres à l'installation et à leur notice.
+        """
+        if state.config.mode is not ProtocolMode.HIGH_PH_MONITORING:
+            return []
+        actions: list[str] = []
+        ph = state.current_ph
+        if ph > state.config.target_ph:
+            actions.append(
+                f"pH {ph:.2f} au-dessus de la cible {state.config.target_ph:.2f} : "
+                "verifier la mesure et la consigne du regulateur ; aucune dose d'acide n'est calculee."
+            )
+        else:
+            actions.append(
+                f"pH {ph:.2f} a la cible ou en dessous : ne plus employer ce parcours pH haut pour "
+                "decider d'une correction ; reevaluer les mesures avant toute action."
+            )
+        if ph > 7.8:
+            actions.append(
+                "pH au-dessus de 7,8 : il sort de la plage usuelle 7,0-7,8 et le chlore est moins efficace."
+            )
+        if state.current_tac_ppm != state.config.target_tac_ppm:
+            actions.append(
+                f"TAC mesure {state.current_tac_ppm:.0f} ppm, cible archivee "
+                f"{state.config.target_tac_ppm:.0f} ppm : le noter et suivre la notice ; "
+                "aucun bicarbonate n'est planifie dans ce parcours."
+            )
+        if not state.water_measurements:
+            return actions + ["Mesurer le chlore libre avant de decider du traitement."]
+
+        chlorine = state.water_measurements[-1].free_chlorine_ppm
+        minimum = state.config.free_chlorine_min_ppm
+        if state.treatment.chlorine_treatment in {
+            ChlorineTreatment.STABILIZED_TABLETS,
+            ChlorineTreatment.STABILIZED_DICHLOR,
+        }:
+            minimum = max(minimum, 2.0)
+        if chlorine < minimum:
+            actions.append(
+                f"Chlore libre {chlorine:.1f} ppm sous la borne basse {minimum:.1f} ppm : "
+                "restaurer la desinfection uniquement suivant l'etiquette et re-mesurer."
+            )
+            if state.treatment.electrolysis_status is ElectrolysisStatus.STOPPED:
+                actions.append(
+                    "Electrolyse arretee : ne pas supposer que le chlore remontera sans action conforme "
+                    "a la notice de l'installation."
+                )
+            if state.treatment.stabilized_tablet_status is StabilizedTabletStatus.CONSUMED:
+                actions.append(
+                    "Galets declares consommes : ne pas compter sur le doseur actuel pour remonter le chlore."
+                )
+        elif chlorine > state.config.free_chlorine_max_ppm:
+            actions.append(
+                f"Chlore libre {chlorine:.1f} ppm au-dessus de la borne haute declaree "
+                f"{state.config.free_chlorine_max_ppm:.1f} ppm : ne pas ajouter de chlore ; "
+                "suivre l'etiquette avant la baignade et re-mesurer."
+            )
+            if state.treatment.stabilized_tablet_status is StabilizedTabletStatus.ACTIVE:
+                actions.append("Galets encore en place : verifier le doseur et la notice avant toute recharge.")
+        else:
+            actions.append("Chlore libre dans la plage declaree : ne pas ajouter de galet par automatisme.")
+        if chlorine > 10:
+            actions.append(
+                "Au-dela de 10 ppm, un test DPD peut etre decolore et afficher a tort une valeur basse ou nulle ; "
+                "confirmer la mesure selon la notice du test."
+            )
+        return actions
 
     def build_supply_estimate(
         self, config: ProtocolConfig, treatment: TreatmentContext
@@ -141,18 +223,28 @@ class ProtocolService:
         return check
 
     def set_treatment(
-        self, electrolysis_status: ElectrolysisStatus, chlorine_treatment: ChlorineTreatment
+        self,
+        electrolysis_status: ElectrolysisStatus,
+        chlorine_treatment: ChlorineTreatment,
+        ph_regulator_status: PhRegulatorStatus | None = None,
+        stabilized_tablet_status: StabilizedTabletStatus | None = None,
     ) -> ProtocolState:
         """Enregistre le mode de désinfection actuellement appliqué au bassin."""
         state = self.active()
         state.treatment = TreatmentContext(
             electrolysis_status=electrolysis_status,
             chlorine_treatment=chlorine_treatment,
+            ph_regulator_status=ph_regulator_status or state.treatment.ph_regulator_status,
+            stabilized_tablet_status=stabilized_tablet_status
+            or state.treatment.stabilized_tablet_status,
         )
-        state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
+        if state.config.mode is ProtocolMode.RAISE_PH_TAC:
+            state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
         state.add_event(
             "Contexte traitement : "
-            f"electrolyse {electrolysis_status.value}, chlore {chlorine_treatment.value}"
+            f"electrolyse {electrolysis_status.value}, chlore {chlorine_treatment.value}, "
+            f"regulateur pH {state.treatment.ph_regulator_status.value}, "
+            f"galets {state.treatment.stabilized_tablet_status.value}"
         )
         self.repository.save(state)
         return state
@@ -221,6 +313,7 @@ class ProtocolService:
             count=count, unit_mass_g=unit_mass_g, product_label=product_label
         )
         state.stabilized_tablets.append(record)
+        state.treatment.stabilized_tablet_status = StabilizedTabletStatus.ACTIVE
         mass = f" de {unit_mass_g:.0f} g" if unit_mass_g is not None else ""
         state.add_event(f"Galets stabilises ajoutes : {count}{mass} ({product_label})")
         self.repository.save(state)
@@ -257,7 +350,10 @@ class ProtocolService:
         """
         active = self.repository.active()
         if active and not replace_active:
-            if active.supply_estimate is None:
+            if (
+                active.supply_estimate is None
+                and active.config.mode is ProtocolMode.RAISE_PH_TAC
+            ):
                 active.supply_estimate = self.build_supply_estimate(active.config, active.treatment)
                 active.add_event("Plan d'approvisionnement genere pour le protocole existant")
                 self.repository.save(active)
@@ -270,19 +366,46 @@ class ProtocolService:
             treatment=treatment or TreatmentContext(),
             current_ph=config.initial_ph,
             current_tac_ppm=config.initial_tac_ppm,
-        )
-        state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
-        state.initial_coherence = self.enrich_check_with_treatment(
-            state,
-            self.chemistry.verify(
-                config,
-                ph_before=config.initial_ph,
-                tac_before_ppm=config.initial_tac_ppm,
-                ph_after=config.initial_ph,
-                tac_after_ppm=config.initial_tac_ppm,
+            step=(
+                ProtocolStep.HIGH_PH_MONITORING
+                if config.mode is ProtocolMode.HIGH_PH_MONITORING
+                else ProtocolStep.PH_TO_INTERMEDIATE
             ),
         )
-        state.add_event("Protocole cree et mesures initiales controlees")
+        if config.mode is ProtocolMode.RAISE_PH_TAC:
+            state.supply_estimate = self.build_supply_estimate(state.config, state.treatment)
+            state.initial_coherence = self.enrich_check_with_treatment(
+                state,
+                self.chemistry.verify(
+                    config,
+                    ph_before=config.initial_ph,
+                    tac_before_ppm=config.initial_tac_ppm,
+                    ph_after=config.initial_ph,
+                    tac_after_ppm=config.initial_tac_ppm,
+                ),
+            )
+            state.add_event("Protocole cree et mesures initiales controlees")
+        else:
+            state.add_event("Surveillance pH haut creee : aucune dose d'acide ou de chlore n'est calculee")
+        self.repository.save(state)
+        return state
+
+    def record_water_measurement(
+        self, ph: float, tac_ppm: float, free_chlorine_ppm: float
+    ) -> ProtocolState:
+        """Archive une mesure eau complète pour le parcours de surveillance."""
+        state = self.active()
+        if state.step is not ProtocolStep.HIGH_PH_MONITORING:
+            raise ValueError("La mesure eau sans dose est reservee a la surveillance pH haut.")
+        self.validate_tac_measurement(state, tac_ppm)
+        measurement = WaterMeasurement(ph=ph, tac_ppm=tac_ppm, free_chlorine_ppm=free_chlorine_ppm)
+        state.water_measurements.append(measurement)
+        state.current_ph = ph
+        state.current_tac_ppm = tac_ppm
+        state.add_event(
+            f"Mesure surveillance : pH {ph:.2f}, TAC {tac_ppm:.0f} ppm, "
+            f"chlore libre {free_chlorine_ppm:.1f} ppm"
+        )
         self.repository.save(state)
         return state
 

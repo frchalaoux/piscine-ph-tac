@@ -280,6 +280,76 @@ Une alerte est un signal de contrôle : ne pas l'ignorer et ne pas ajouter une f
 
 Si l'application indique que la prédiction de pH est indisponible, le couple pH/TAC de départ est hors du domaine utile du modèle carbonate fermé. Dans ce cas, ne pas utiliser un pH attendu théorique : utiliser la variation de pH réellement mesurée après chaque dose pour choisir la dose suivante.
 
+## Cas distinct : pH haut et chlore à surveiller
+
+Quand le pH est déjà au-dessus de la cible, ne démarrez pas le protocole de
+soude/bicarbonate : il sert uniquement à remonter un pH bas. Créez plutôt une
+archive de surveillance ; elle journalise le pH, le TAC, le chlore libre et
+l'état des équipements sans calculer de dose d'acide ou de chlore :
+
+```bash
+piscine-ph start --no-guided --force \
+  --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 \
+  --chlorine-min 1 --chlorine-max 4 \
+  --electrolysis arretee --ph-regulator arrete \
+  --chlorine galets_stabilises --tablets consommes
+piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
+```
+
+Les bornes de chlore doivent être celles de l'étiquette du désinfectant. Le
+programme alerte si le chlore est sous ou au-dessus de ces bornes, mais ne
+propose jamais une dose. Il signale aussi les galets consommés, l'électrolyse ou
+le régulateur de pH arrêté. Le [guide de surveillance](surveillance-ph-haut-chlore.md)
+explique le parcours, les limites et les précautions.
+
+## Interface à menus
+
+La commande suivante lance une interface Textual destinée à la consultation et
+aux opérations courantes :
+
+```bash
+piscine-ph tui
+```
+
+Les onglets donnent accès au tableau de bord, aux mesures, au contexte de
+traitement, à l'historique et à l'aide. Les raccourcis `r` et `q` actualisent
+l'affichage et quittent l'application. L'onglet **Mesures** enregistre les
+mesures attendues par le protocole actif ; pour la surveillance pH haut, il
+demande pH, TAC et chlore libre. L'onglet **Traitement** ne pilote aucun
+appareil : il consigne seulement l'état de l'électrolyse, du régulateur et des
+galets.
+
+Les commandes Typer restent disponibles et sont à privilégier pour les scripts
+et pour préparer les doses du protocole historique.
+
+### Installation publiée ou version locale
+
+La commande globale `piscine-ph` exécute la version installée depuis un tag de
+release. Elle ne connaît donc pas une commande ajoutée seulement dans le dépôt
+de développement. Si `piscine-ph tui` répond `No such command 'tui'`, la
+version installée est antérieure à l'ajout de la TUI.
+
+Pour essayer la version locale du projet sans modifier l'installation globale :
+
+```bash
+cd /Users/frchalaoux/Documents/Developpement/rectificationph
+uv run piscine-ph tui
+```
+
+Pour remplacer temporairement l'installation globale par cette version locale :
+
+```bash
+cd /Users/frchalaoux/Documents/Developpement/rectificationph
+uv tool install --reinstall .
+piscine-ph tui
+```
+
+`uv tool install --reinstall .` remplace l'outil global existant. Cette option
+est utile pour tester ; elle ne crée pas une release et ne permet pas à d'autres
+utilisateurs d'installer cette version. Pour revenir à une version publiée,
+relancer la commande d'installation associée au tag voulu sur la page des
+releases.
+
 ## Voir les protocoles précédents
 
 ```bash

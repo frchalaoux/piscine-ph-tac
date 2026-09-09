@@ -53,12 +53,12 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 
 | Champ | Type | Signification |
 | --- | --- | --- |
-| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 2 ; une archive plus ancienne reste lisible lorsque ses champs absents ont une valeur par défaut. |
+| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 3 ; une archive plus ancienne reste lisible lorsque ses champs absents ont une valeur par défaut. |
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
 | `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
-| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `termine` ou `annule`. |
+| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `surveillance_ph_haut`, `termine` ou `annule`. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
 
@@ -81,6 +81,13 @@ Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_
 | `treatment.chlorine_treatment` | `inconnu`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | Active les avertissements sur le CYA et la prédiction de pH. |
 | `stabilized_tablets` | liste | Ajouts de galets déclarés : `count`, `unit_mass_g` éventuel, `product_label`, `recorded_at`. Le nombre de galets ne sert pas à calculer le CYA. |
 | `cyanuric_acid_measurements` | liste | Mesures CYA réelles : `cya_ppm` et `recorded_at`. |
+| `water_measurements` | liste | Mesures sans ajout de produit du parcours `surveillance_ph_haut` : `ph`, `tac_ppm`, `free_chlorine_ppm`, date. |
+
+Dans une archive de surveillance, `config.mode` vaut `surveillance_ph_haut` et
+les bornes lues sur l'étiquette du désinfectant sont archivées sous
+`free_chlorine_min_ppm` et `free_chlorine_max_ppm`. Cette archive ne contient
+pas de plan d'approvisionnement et les commandes de dose NaOH/bicarbonate sont
+inactives.
 
 ### Plan d’approvisionnement
 
