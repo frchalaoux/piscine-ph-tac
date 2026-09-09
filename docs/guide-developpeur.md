@@ -47,6 +47,10 @@ uv run python scripts/release.py 0.1.1 --publish
 
 Le programme exige `git`, `gh` authentifié et `uv`. Il refuse de publier si la branche distante correspondante n'est pas comprise dans le commit courant ou si le tag existe déjà.
 
+## Évolutions en attente
+
+La note [sur le carbonate de sodium (pH+)](evolution-carbonate-sodium.md) conserve la comparaison avec la lessive de soude et le bicarbonate, les prix de référence, les limites de sécurité et le plan d'implémentation. Ne pas ajouter ce produit au calcul actuel sans suivre les prérequis listés dans cette note.
+
 ## Organisation du code
 
 ```text
