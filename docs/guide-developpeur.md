@@ -66,13 +66,13 @@ Après `git diff --check`, la sortie doit impérativement afficher, dans cet ord
 
 ### Reprendre une release interrompue
 
-Si une interruption est survenue après la mise à jour des six fichiers ci-dessus mais avant le commit, vérifier d'abord qu'aucun autre fichier n'est modifié. Après avoir commité séparément tout correctif nécessaire au script lui-même, reprendre avec :
+Si une interruption est survenue après la mise à jour des six fichiers ci-dessus, vérifier d'abord qu'aucun fichier étranger à la release n'est modifié. Après avoir commité séparément tout correctif nécessaire au script lui-même, reprendre avec :
 
 ```bash
 uv run python scripts/release.py 0.1.2 --publish --resume
 ```
 
-Le mode `--resume` exige que `pyproject.toml` porte déjà `0.1.2` et refuse tout fichier modifié hors de la liste de release. Il relance les validations, indexe les six fichiers, crée le commit de release, puis poursuit le push, le tag et la release GitHub.
+Le mode `--resume` exige que `pyproject.toml` porte déjà `0.1.2` et refuse tout fichier modifié hors de la liste de release. Il relance les validations et adopte l'un des deux parcours suivants : il indexe et committe les six fichiers s'ils sont encore modifiés ; s'ils sont déjà tous committés (par exemple par erreur dans VS Code), il reprend depuis `HEAD`, sans créer un deuxième commit. Dans les deux cas, il poursuit avec le push éventuel, le tag et la release GitHub.
 
 ## Évolutions en attente
 

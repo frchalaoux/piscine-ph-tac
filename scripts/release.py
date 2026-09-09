@@ -92,14 +92,17 @@ def ensure_only_release_files_are_modified() -> None:
         )
 
 
-def stage_release_files() -> None:
-    """Indexe et contrôle uniquement les fichiers produits par une release."""
+def stage_release_files(*, allow_empty: bool) -> bool:
+    """Indexe les fichiers de release et indique si un commit est nécessaire."""
     paths = [str(path.relative_to(ROOT)) for path in RELEASE_FILES]
     run("git", "add", *paths)
     run("git", "diff", "--cached", "--check")
     staged = run("git", "diff", "--cached", "--quiet", check=False)
     if not staged.returncode:
+        if allow_empty:
+            return False
         raise RuntimeError("Aucune modification de release n'est indexée ; commit annulé.")
+    return True
 
 
 def require_tools() -> None:
@@ -156,9 +159,12 @@ def publish(version: str, *, resume: bool) -> None:
     run("uv", "run", "pytest")
     run("uv", "build")
     run("git", "diff", "--check")
-    stage_release_files()
-    run("git", "commit", "-m", f"release: preparer la version {version}")
-    run("git", "push", "origin", f"HEAD:{branch}")
+    has_release_changes = stage_release_files(allow_empty=resume)
+    if has_release_changes:
+        run("git", "commit", "-m", f"release: preparer la version {version}")
+        run("git", "push", "origin", f"HEAD:{branch}")
+    else:
+        print("Les fichiers de version sont déjà committés ; reprise depuis HEAD.")
     run("git", "tag", "-a", tag, "-m", f"Version {version}")
     run("git", "push", "origin", tag)
     run("gh", "release", "create", tag, "--title", f"piscine-ph {tag}", "--notes", release_notes(version))
