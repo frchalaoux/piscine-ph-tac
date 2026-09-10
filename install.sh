@@ -1,12 +1,10 @@
 #!/bin/sh
-# Installe la branche de test piscine-ph pour le compte courant (macOS ou Linux).
-# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive de la branche.
+# Installe piscine-ph pour le compte courant (macOS ou Linux).
+# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 set -eu
 
-test_branch="test-cli-windows"
-source_url="https://github.com/frchalaoux/piscine-ph-tac/archive/refs/heads/${test_branch}.tar.gz"
-
-echo "Installation de la version de TEST piscine-ph (${test_branch})..."
+release_version="v0.2.3"
+source_url="https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/${release_version}.tar.gz"
 
 if command -v uv >/dev/null 2>&1; then
     uv_command="uv"
@@ -36,7 +34,7 @@ echo "Installation de Python 3.11..."
 
 echo
 if command -v piscine-ph >/dev/null 2>&1; then
-    echo "Version de TEST installee. Lancez : piscine-ph start"
+    echo "piscine-ph est installe. Lancez : piscine-ph start"
 else
-    echo "Version de TEST installee. Fermez et rouvrez le terminal, puis lancez : piscine-ph start"
+    echo "piscine-ph est installe. Fermez et rouvrez le terminal, puis lancez : piscine-ph start"
 fi
