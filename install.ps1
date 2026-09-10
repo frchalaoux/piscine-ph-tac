@@ -20,7 +20,7 @@ else {
 
 & $uvCommand tool install --reinstall $sourceUrl
 if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+    throw "L'installation de piscine-ph a échoué (code $LASTEXITCODE)."
 }
 
 Write-Host ""
