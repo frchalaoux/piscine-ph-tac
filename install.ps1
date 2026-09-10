@@ -2,7 +2,7 @@
 # Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 $ErrorActionPreference = "Stop"
 
-$releaseVersion = "v0.2.1"
+$releaseVersion = "v0.2.2"
 $sourceUrl = "https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/$releaseVersion.tar.gz"
 
 if (Get-Command uv -ErrorAction SilentlyContinue) {
