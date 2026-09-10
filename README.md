@@ -45,13 +45,14 @@ piscine-ph cancel-protocol
 piscine-ph measure --ph 5.2 --tac 50
 piscine-ph plan-tac --tac 50
 piscine-ph measure-tac --ph 6.1 --tac 80
-piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises
+piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises
 piscine-ph record-tablets --count 2 --unit-mass-g 200
 piscine-ph measure-cya --cya 35
 piscine-ph tui
 piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4
 piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
 piscine-ph history
+piscine-ph json
 ```
 
 `piscine-ph start` reprend automatiquement le dernier protocole non terminé.

@@ -61,12 +61,22 @@ class StabilizedTabletStatus(StrEnum):
 
 
 class ChlorineTreatment(StrEnum):
-    """Famille de désinfectant déclarée pour contextualiser le modèle pH/TAC."""
+    """Ancienne famille de chlore, conservée pour lire les archives v1-v3."""
 
     UNKNOWN = "inconnu"
     STABILIZED_TABLETS = "galets_stabilises"
     STABILIZED_DICHLOR = "dichlore_stabilise"
     UNSTABILIZED = "chlore_non_stabilise"
+
+
+class DisinfectionMethod(StrEnum):
+    """Source de désinfection active, qui ne peut être choisie qu'une fois."""
+
+    UNKNOWN = "inconnu"
+    SALT_ELECTROLYSIS = "electrolyse_au_sel"
+    STABILIZED_TABLETS = "galets_stabilises"
+    STABILIZED_DICHLOR = "dichlore_stabilise"
+    UNSTABILIZED_CHLORINE = "chlore_non_stabilise"
 
 
 class NaOHConcentrationSource(StrEnum):
@@ -86,9 +96,44 @@ class TreatmentContext(BaseModel):
     """
 
     electrolysis_status: ElectrolysisStatus = ElectrolysisStatus.UNKNOWN
-    chlorine_treatment: ChlorineTreatment = ChlorineTreatment.UNKNOWN
+    disinfection_method: DisinfectionMethod = DisinfectionMethod.UNKNOWN
     ph_regulator_status: PhRegulatorStatus = PhRegulatorStatus.UNKNOWN
     stabilized_tablet_status: StabilizedTabletStatus = StabilizedTabletStatus.UNKNOWN
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_chlorine_treatment(cls, data: object) -> object:
+        """Convertit l'ancien champ indépendant en source active unique.
+
+        Les archives précédentes pouvaient déclarer simultanément un chlore non
+        stabilisé et une électrolyse. Cette combinaison représentait en pratique
+        une électrolyse au sel ; elle est donc migrée sans perdre le contexte.
+        """
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        if "disinfection_method" in values:
+            values.pop("chlorine_treatment", None)
+            return values
+        legacy = values.pop("chlorine_treatment", ChlorineTreatment.UNKNOWN.value)
+        legacy_value = str(legacy)
+        electrolysis = values.get("electrolysis_status", ElectrolysisStatus.UNKNOWN.value)
+        if (
+            legacy_value == ChlorineTreatment.UNSTABILIZED.value
+            and str(electrolysis) != ElectrolysisStatus.UNKNOWN.value
+        ):
+            values["disinfection_method"] = DisinfectionMethod.SALT_ELECTROLYSIS.value
+            return values
+        values["disinfection_method"] = legacy_value
+        return values
+
+    @property
+    def uses_stabilized_chlorine(self) -> bool:
+        """Indique si la source active introduit du CYA."""
+        return self.disinfection_method in {
+            DisinfectionMethod.STABILIZED_TABLETS,
+            DisinfectionMethod.STABILIZED_DICHLOR,
+        }
 
 
 class StabilizedTabletRecord(BaseModel):
@@ -285,7 +330,7 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 3
+    version: int = 4
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
@@ -306,6 +351,18 @@ class ProtocolState(BaseModel):
     water_measurements: list[WaterMeasurement] = Field(default_factory=list)
     cumulative_additions: CumulativeAdditions = Field(default_factory=CumulativeAdditions)
     journal: list[JournalEvent] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def migrate_schema_version(self) -> ProtocolState:
+        """Marque une archive relue avec le schéma qui sera désormais écrit.
+
+        La conversion du contexte de traitement s'effectue dans
+        :class:`TreatmentContext`. Conserver un numéro ancien après une écriture
+        rendrait toutefois le JSON ambigu : une archive v3 pourrait alors
+        contenir le champ v4 ``disinfection_method``.
+        """
+        self.version = max(self.version, 4)
+        return self
 
     def add_event(self, event: str) -> None:
         """Ajoute un événement au journal et actualise la date de modification."""

@@ -27,10 +27,10 @@ La prévision de pH du contrôle de cohérence devient en revanche **indicative*
 Au début de la période temporaire, déclarer le contexte :
 
 ```bash
-piscine-ph start --electrolysis arretee --chlorine galets_stabilises
+piscine-ph start --electrolysis arretee --disinfection galets_stabilises
 ```
 
-Si le protocole existe déjà, utiliser `piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
+Si le protocole existe déjà, utiliser `piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises`. Le programme affiche alors, après les contrôles pH/TAC, un avertissement indiquant que la prévision de pH est indicative. Le contexte est conservé dans l'archive JSON, y compris si le protocole est repris plus tard.
 
 À la création, l'application affiche et stocke également un plan d'approvisionnement. Il comprend un repère prudent de soude à acheter et une quantité de bicarbonate fondée sur le TAC initial ; une marge additionnelle est incluse avec les galets stabilisés. Cette information sert uniquement à préparer les achats. Elle ne prédit pas la quantité de soude à verser et ne remplace jamais les mesures réalisées entre deux doses.
 
@@ -68,7 +68,7 @@ Un produit à base de dichloroisocyanurate ou de trichloroisocyanurate est stabi
 Quand la cellule est réparée : arrêter les galets stabilisés, contrôler pH, TAC, chlore libre et CYA, puis enregistrer le nouveau contexte :
 
 ```bash
-piscine-ph treatment --electrolysis en_marche --chlorine chlore_non_stabilise
+piscine-ph treatment --electrolysis en_marche --disinfection electrolyse_au_sel
 ```
 
-Le champ `chlore_non_stabilise` décrit ici le chlore produit par l'électrolyse : il n'ajoute pas de CYA. La tendance à la hausse du pH peut alors reprendre ; reprendre les corrections progressivement, à partir des nouvelles mesures plutôt que de l'ancien rythme.
+La valeur `electrolyse_au_sel` désigne explicitement la désinfection par la cellule ; elle n'ajoute pas de CYA. La tendance à la hausse du pH peut alors reprendre ; reprendre les corrections progressivement, à partir des nouvelles mesures plutôt que de l'ancien rythme.

@@ -14,7 +14,7 @@ import typer
 
 from .chemistry import ChemistryCalculator
 from .models import (
-    ChlorineTreatment,
+    DisinfectionMethod,
     ElectrolysisStatus,
     NaOHConcentrationSource,
     PendingBicarbonatePlan,
@@ -72,17 +72,7 @@ def show_check(state: ProtocolState) -> None:
 
 def next_command(state: ProtocolState) -> str:
     """Retourne la commande suivante selon l'etat concret du protocole."""
-    if state.step in {ProtocolStep.COMPLETE, ProtocolStep.CANCELLED}:
-        return "piscine-ph history"
-    if state.pending_naoh:
-        return "piscine-ph measure --ph VOTRE_PH --tac VOTRE_TAC"
-    if state.pending_bicarbonate:
-        return "piscine-ph measure-tac --ph VOTRE_PH --tac VOTRE_TAC"
-    if state.step is ProtocolStep.HIGH_PH_MONITORING:
-        return "piscine-ph record-water --ph VOTRE_PH --tac VOTRE_TAC --free-chlorine VOTRE_CHLORE"
-    if state.step is ProtocolStep.TAC_TO_TARGET:
-        return "piscine-ph plan-tac --tac VOTRE_TAC"
-    return "piscine-ph dose"
+    return ProtocolService.next_command(state)
 
 
 def show_next_command(state: ProtocolState) -> None:
@@ -110,10 +100,10 @@ def show_treatment(state: ProtocolState) -> None:
     treatment = state.treatment
     typer.echo(
         "Traitement declare : "
-        f"electrolyse {treatment.electrolysis_status.value}, "
-        f"chlore {treatment.chlorine_treatment.value}, "
-        f"regulateur pH {treatment.ph_regulator_status.value}, "
-        f"galets {treatment.stabilized_tablet_status.value}."
+        f"desinfection active {treatment.disinfection_method.value}.\n"
+        f"Electrolyseur au sel : {treatment.electrolysis_status.value}.\n"
+        f"Regulateur pH : {treatment.ph_regulator_status.value}.\n"
+        f"Doseur de galets stabilises : {treatment.stabilized_tablet_status.value}."
     )
     if state.stabilized_tablets:
         count = sum(record.count for record in state.stabilized_tablets)
@@ -218,9 +208,7 @@ def prompt_naoh_concentration() -> tuple[
         return concentration, NaOHConcentrationSource.GRAMS_PER_LITRE, None, None
     percent = typer.prompt("Pourcentage de NaOH indique sur l'etiquette", type=float)
     if choice == 2:
-        density = typer.prompt(
-            "Densite en g/mL indiquee par la FDS (ne pas deviner)", type=float
-        )
+        density = typer.prompt("Densite en g/mL indiquee par la FDS (ne pas deviner)", type=float)
         concentration = percent * density * 10
         typer.secho(
             f"Conversion retenue : {percent:.1f} % m/m x {density:.3f} g/mL = "
@@ -247,17 +235,24 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
         2: ElectrolysisStatus.RUNNING,
         3: ElectrolysisStatus.UNKNOWN,
     }[electrolysis_choice]
-    chlorine_choice = prompted_choice(
-        "Desinfectant actuellement utilise ?",
-        ["Galets stabilises", "Dichlore stabilise", "Chlore non stabilise", "Inconnu"],
-        default=4,
+    disinfection_choice = prompted_choice(
+        "Quelle desinfection est active ?",
+        [
+            "Electrolyse au sel",
+            "Galets stabilises",
+            "Dichlore stabilise",
+            "Chlore non stabilise",
+            "Inconnue",
+        ],
+        default=5,
     )
-    chlorine = {
-        1: ChlorineTreatment.STABILIZED_TABLETS,
-        2: ChlorineTreatment.STABILIZED_DICHLOR,
-        3: ChlorineTreatment.UNSTABILIZED,
-        4: ChlorineTreatment.UNKNOWN,
-    }[chlorine_choice]
+    disinfection = {
+        1: DisinfectionMethod.SALT_ELECTROLYSIS,
+        2: DisinfectionMethod.STABILIZED_TABLETS,
+        3: DisinfectionMethod.STABILIZED_DICHLOR,
+        4: DisinfectionMethod.UNSTABILIZED_CHLORINE,
+        5: DisinfectionMethod.UNKNOWN,
+    }[disinfection_choice]
     regulator_choice = prompted_choice(
         "Etat du regulateur de pH ?", ["Arrete", "En marche", "Inconnu"], default=3
     )
@@ -267,7 +262,7 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
         3: PhRegulatorStatus.UNKNOWN,
     }[regulator_choice]
     tablets = StabilizedTabletStatus.UNKNOWN
-    if chlorine is ChlorineTreatment.STABILIZED_TABLETS:
+    if disinfection is DisinfectionMethod.STABILIZED_TABLETS:
         tablet_choice = prompted_choice(
             "Etat des galets dans le doseur ?",
             ["En place", "Consommes", "Suspendus", "Non necessaires", "Inconnu"],
@@ -281,15 +276,15 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
             5: StabilizedTabletStatus.UNKNOWN,
         }[tablet_choice]
     cya = None
-    if chlorine in {
-        ChlorineTreatment.STABILIZED_TABLETS,
-        ChlorineTreatment.STABILIZED_DICHLOR,
+    if disinfection in {
+        DisinfectionMethod.STABILIZED_TABLETS,
+        DisinfectionMethod.STABILIZED_DICHLOR,
     } and typer.confirm("Avez-vous une mesure CYA recente a enregistrer ?", default=False):
         cya = typer.prompt("CYA mesure en ppm", type=float)
     return (
         TreatmentContext(
             electrolysis_status=electrolysis,
-            chlorine_treatment=chlorine,
+            disinfection_method=disinfection,
             ph_regulator_status=regulator,
             stabilized_tablet_status=tablets,
         ),
@@ -335,18 +330,26 @@ def start(
     electrolysis: Annotated[
         ElectrolysisStatus, typer.Option(help="Etat initial : inconnu, en_marche ou arretee.")
     ] = ElectrolysisStatus.UNKNOWN,
-    chlorine: Annotated[
-        ChlorineTreatment,
+    disinfection: Annotated[
+        DisinfectionMethod,
         typer.Option(
-            help="Desinfectant initial : inconnu, galets_stabilises, dichlore_stabilise ou chlore_non_stabilise."
+            "--disinfection",
+            "--chlorine",
+            help=(
+                "Desinfection active : electrolyse_au_sel, galets_stabilises, "
+                "dichlore_stabilise, chlore_non_stabilise ou inconnu. "
+                "--chlorine reste un alias historique."
+            ),
         ),
-    ] = ChlorineTreatment.UNKNOWN,
+    ] = DisinfectionMethod.UNKNOWN,
     ph_regulator: Annotated[
         PhRegulatorStatus, typer.Option(help="Etat : inconnu, en_marche ou arrete.")
     ] = PhRegulatorStatus.UNKNOWN,
     tablets: Annotated[
         StabilizedTabletStatus,
-        typer.Option(help="Etat des galets : inconnu, en_place, consommes, suspendus ou non_necessaires."),
+        typer.Option(
+            help="Etat des galets : inconnu, en_place, consommes, suspendus ou non_necessaires."
+        ),
     ] = StabilizedTabletStatus.UNKNOWN,
     chlorine_min: float = typer.Option(
         1.0, min=0, help="Borne basse de chlore libre issue de l'etiquette, en ppm."
@@ -379,19 +382,21 @@ def start(
                 ["Correction pH/TAC vers le haut", "Surveillance d'un pH au-dessus de la cible"],
             )
             mode = (
-                ProtocolMode.RAISE_PH_TAC
-                if mode_choice == 1
-                else ProtocolMode.HIGH_PH_MONITORING
+                ProtocolMode.RAISE_PH_TAC if mode_choice == 1 else ProtocolMode.HIGH_PH_MONITORING
             )
             volume_m3 = typer.prompt("Volume du bassin en m3", default=volume_m3, type=float)
             initial_ph = typer.prompt("pH mesure au depart", default=initial_ph, type=float)
             initial_tac = typer.prompt("TAC mesure en ppm CaCO3", default=initial_tac, type=float)
             target_ph = typer.prompt("pH cible", default=target_ph, type=float)
             chlorine_min = typer.prompt(
-                "Borne basse chlore libre selon l'etiquette, en ppm", default=chlorine_min, type=float
+                "Borne basse chlore libre selon l'etiquette, en ppm",
+                default=chlorine_min,
+                type=float,
             )
             chlorine_max = typer.prompt(
-                "Borne haute chlore libre selon l'etiquette, en ppm", default=chlorine_max, type=float
+                "Borne haute chlore libre selon l'etiquette, en ppm",
+                default=chlorine_max,
+                type=float,
             )
             if mode is ProtocolMode.RAISE_PH_TAC:
                 intermediate_ph = typer.prompt(
@@ -415,7 +420,7 @@ def start(
             density = None
             treatment = TreatmentContext(
                 electrolysis_status=electrolysis,
-                chlorine_treatment=chlorine,
+                disinfection_method=disinfection,
                 ph_regulator_status=ph_regulator,
                 stabilized_tablet_status=tablets,
             )
@@ -519,10 +524,16 @@ def treatment(
     electrolysis: Annotated[
         ElectrolysisStatus, typer.Option(help="Etat : inconnu, en_marche ou arretee.")
     ],
-    chlorine: Annotated[
-        ChlorineTreatment,
+    disinfection: Annotated[
+        DisinfectionMethod,
         typer.Option(
-            help="Desinfectant : inconnu, galets_stabilises, dichlore_stabilise ou chlore_non_stabilise.",
+            "--disinfection",
+            "--chlorine",
+            help=(
+                "Desinfection active : electrolyse_au_sel, galets_stabilises, "
+                "dichlore_stabilise, chlore_non_stabilise ou inconnu. "
+                "--chlorine reste un alias historique."
+            ),
         ),
     ],
     ph_regulator: Annotated[
@@ -538,7 +549,7 @@ def treatment(
 ) -> None:
     """Déclare le traitement en cours afin de contextualiser les alertes pH/TAC."""
     try:
-        state = service().set_treatment(electrolysis, chlorine, ph_regulator, tablets)
+        state = service().set_treatment(electrolysis, disinfection, ph_regulator, tablets)
     except ValueError as error:
         typer.echo(str(error))
         raise typer.Exit(1)
@@ -592,7 +603,9 @@ def record_water(
     except ValueError as error:
         typer.echo(str(error))
         raise typer.Exit(1)
-    typer.secho("Mesure de surveillance enregistree. Aucun dosage n'est calcule.", fg=typer.colors.GREEN)
+    typer.secho(
+        "Mesure de surveillance enregistree. Aucun dosage n'est calcule.", fg=typer.colors.GREEN
+    )
     show_treatment(state)
     show_water_actions(state)
     show_next_command(state)
@@ -860,3 +873,31 @@ def history() -> None:
         typer.echo(
             f"{state.archive_name} | {state.step} | pH {state.current_ph:.2f} | TAC {state.current_tac_ppm:.1f}"
         )
+
+
+@app.command("json")
+def show_json(
+    archive: Annotated[
+        str | None,
+        typer.Argument(help="Nom d'une archive listée par `piscine-ph history` (actif par défaut)."),
+    ] = None,
+) -> None:
+    """Affiche, sans le modifier, le JSON du protocole actif ou d'une archive."""
+    protocol_service = service()
+    repository = protocol_service.repository
+    if archive is None:
+        try:
+            state = protocol_service.active()
+        except ValueError as error:
+            typer.echo(str(error))
+            raise typer.Exit(1)
+    else:
+        state = next((state for state in repository.archives() if state.archive_name == archive), None)
+        if state is None:
+            typer.echo("Archive introuvable. Utilisez `piscine-ph history` pour lister les archives.")
+            raise typer.Exit(1)
+    try:
+        typer.echo((repository.root / state.archive_name).read_text(encoding="utf-8"), nl=False)
+    except OSError as error:
+        typer.echo(f"Lecture du JSON impossible : {error}")
+        raise typer.Exit(1)

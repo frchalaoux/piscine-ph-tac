@@ -123,10 +123,10 @@ Dès la création, il affiche et archive un **approvisionnement indicatif** : st
 Si la cellule est arrêtée pour maintenance et que la désinfection temporaire est assurée par des galets stabilisés, déclarer ce contexte dès le début :
 
 ```bash
-piscine-ph start --electrolysis arretee --chlorine galets_stabilises
+piscine-ph start --electrolysis arretee --disinfection galets_stabilises
 ```
 
-Si le protocole existe déjà, utiliser à la place `piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
+Si le protocole existe déjà, utiliser à la place `piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
 
 Le calcul théorique du TAC reste disponible, mais la prévision de pH devient indicative car les galets acidifient l'eau et apportent du CYA. Journaliser les galets et chaque mesure de stabilisant :
 
@@ -292,7 +292,7 @@ piscine-ph start --no-guided --force \
   --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 \
   --chlorine-min 1 --chlorine-max 4 \
   --electrolysis arretee --ph-regulator arrete \
-  --chlorine galets_stabilises --tablets consommes
+  --disinfection galets_stabilises --tablets consommes
 piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
 ```
 
@@ -311,16 +311,36 @@ aux opérations courantes :
 piscine-ph tui
 ```
 
-Les onglets donnent accès au tableau de bord, aux mesures, au contexte de
-traitement, à l'historique et à l'aide. Les raccourcis `r` et `q` actualisent
-l'affichage et quittent l'application. L'onglet **Mesures** enregistre les
-mesures attendues par le protocole actif ; pour la surveillance pH haut, il
-demande pH, TAC et chlore libre. L'onglet **Traitement** ne pilote aucun
-appareil : il consigne seulement l'état de l'électrolyse, du régulateur et des
-galets.
+La barre de menus en haut donne accès à **Accueil**, **Protocole**,
+**Mesures**, **Traitement**, **Archives** et **Aide**. L'item actif est mis en
+évidence et chaque page défile indépendamment. Les actions d'une page sont
+regroupées dans des items dépliables : aucun champ prérempli n'est affiché sans
+son libellé. `⌘R` sur macOS (`Ctrl+R` sur les autres systèmes) actualise
+l'affichage, et `q` quitte l'application ; `⌘↓` et `⌘↑` sur macOS (`Ctrl+↓` et
+`Ctrl+↑` sur les autres systèmes) font défiler la page
+active. Le menu **Protocole** couvre `start`, `configure-naoh`, `dose`,
+`plan-tac`, les annulations et la correction de mesure. Le menu **Mesures** enregistre les
+mesures attendues par le protocole actif : après une dose de soude ou de
+bicarbonate dans un parcours pH bas, il demande pH et TAC ; pour la
+surveillance pH haut, il demande aussi le chlore libre. L'onglet
+**Traitement** ne pilote aucun appareil : il distingue la **désinfection
+active** (une seule source) de l'état de l'électrolyseur au sel, du doseur de
+galets stabilisés et du régulateur pH.
 
-Les commandes Typer restent disponibles et sont à privilégier pour les scripts
-et pour préparer les doses du protocole historique.
+Le bouton **Arrêter le protocole…** du tableau de bord ouvre une confirmation.
+Après validation, le protocole est marqué `annule` et reste dans l'historique ;
+les éventuelles préparations non confirmées sont retirées, comme avec
+`piscine-ph cancel-protocol`.
+
+Le bouton **Voir le JSON actif** ouvre le fichier du protocole en lecture seule.
+Dans **Archives**, choisir une archive puis **Voir le JSON sélectionné**. Le
+contenu et son chemin sont sélectionnables pour être copiés, sans possibilité de
+modifier les données depuis le TUI.
+
+L'onglet **Commandes CLI** liste la correspondance de chaque commande Typer :
+aucune règle métier n'est dupliquée, les deux interfaces enregistrent les mêmes
+archives et appliquent les mêmes contrôles. Les commandes Typer restent utiles
+pour les scripts et l'automatisation.
 
 ### Installation publiée ou version locale
 
@@ -336,17 +356,20 @@ cd /Users/frchalaoux/Documents/Developpement/rectificationph
 uv run piscine-ph tui
 ```
 
-Pour remplacer temporairement l'installation globale par cette version locale :
+Pour installer une seule fois la version locale en mode développement et lancer
+ensuite `piscine-ph` directement après chaque modification Python :
 
 ```bash
 cd /Users/frchalaoux/Documents/Developpement/rectificationph
-uv tool install --reinstall .
+uv tool install --editable --reinstall .
 piscine-ph tui
 ```
 
-`uv tool install --reinstall .` remplace l'outil global existant. Cette option
-est utile pour tester ; elle ne crée pas une release et ne permet pas à d'autres
-utilisateurs d'installer cette version. Pour revenir à une version publiée,
+`--editable` fait pointer l'outil global vers le dépôt ; `--reinstall` remplace
+une éventuelle installation publiée existante. Les changements de code sont
+ensuite visibles sans réinstallation. Refaire l'installation seulement après
+une modification de dépendance, de `pyproject.toml` ou de l'entrée de commande :
+`uv tool install --editable --reinstall .`. Pour revenir à une version publiée,
 relancer la commande d'installation associée au tag voulu sur la page des
 releases.
 
@@ -357,6 +380,17 @@ piscine-ph history
 ```
 
 Les fichiers JSON de suivi restent dans `data/protocoles/`. Ils ne sont pas ajoutés à Git.
+Pour consulter et copier le JSON du protocole actif, sans le modifier :
+
+```bash
+piscine-ph json
+```
+
+Pour consulter une archive précise, utiliser son nom affiché par `history` :
+
+```bash
+piscine-ph json protocole_20260910_102222.json
+```
 
 ## Aide
 

@@ -109,12 +109,15 @@ uv run piscine-ph tui --help
 Pour tester le comportement d'une installation globale avec le code local :
 
 ```bash
-uv tool install --reinstall .
+uv tool install --editable --reinstall .
 piscine-ph tui
 ```
 
-Cette commande modifie l'environnement d'outils global de la machine ; elle est
-réservée à un poste de développement ou de test. Elle ne remplace ni les tests,
+Cette commande modifie l'environnement d'outils global de la machine, mais le
+lie au répertoire local : les changements de code Python sont visibles sans
+réinstallation. Après un changement de dépendance, de `pyproject.toml` ou de
+l'entrée de script, relancer `uv tool install --editable --reinstall .`. Ce
+mode est réservé au développement ou aux tests ; il ne remplace ni les tests,
 ni le build, ni la publication. Après une release, l'utilisateur doit installer
 le tag publié avec le script d'installation de cette release ; ne lui demandez
 pas d'installer directement une branche ou un répertoire de développement.
@@ -237,11 +240,35 @@ Avant de changer une constante, une tolérance, une formule ou l'unité d'une va
 4. Ajouter ou adapter les tests de service ; ajouter un test chimique si une formule évolue.
 5. Documenter la commande dans le guide utilisateur, le README si elle est principale, et ce guide si elle change l'architecture.
 
+Toute commande CLI doit avoir une entrée TUI fonctionnelle, ou être explicitement
+représentée comme l'interface déjà ouverte (`tui`) ou comme le guide de
+navigation (`menu`). CLI et TUI appellent exclusivement `ProtocolService` : ne
+jamais porter une validation, un calcul ou une écriture JSON dans une seule des
+deux interfaces. Mettre à jour l'onglet **Commandes CLI** et son test à chaque
+ajout ou suppression de commande.
+
 Pour tester une commande manuellement sans toucher aux données d'exploitation, il est préférable de tester le service avec un répertoire temporaire, comme dans les tests. La fonction CLI `service()` utilise volontairement `data/protocoles/` en exécution normale.
 
 ## Tests et qualité
 
-Les tests de chimie vérifient les conversions et les cas où le modèle pH doit être désactivé. Les tests de service vérifient les transitions, l'annulation, la reprise d'archive, la correction de mesure, les cumuls et la migration de l'ancien JSON.
+Les tests de chimie vérifient les conversions et les cas où le modèle pH doit être désactivé. Les tests de service vérifient les transitions, l'annulation, la reprise d'archive, la correction de mesure, les cumuls et la migration de l'ancien JSON. Les tests Textual vérifient que l'interface peut enregistrer les mesures des deux parcours et qu'elle nomme explicitement la désinfection active et chaque appareil.
+
+### Contexte de traitement
+
+`TreatmentContext.disinfection_method` est la **source active unique** de chlore :
+`electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`,
+`chlore_non_stabilise` ou `inconnu`. Les états de l'électrolyseur au sel, du
+doseur de galets stabilisés et du régulateur pH sont des données séparées ; ils
+décrivent les appareils installés sans constituer une seconde désinfection
+active. La CLI accepte `--disinfection`; `--chlorine` demeure un alias de
+compatibilité.
+
+La migration Pydantic de `TreatmentContext` lit l'ancien champ
+`chlorine_treatment` des archives v1–v3. Si cette ancienne valeur est
+`chlore_non_stabilise` et qu'un état d'électrolyseur est déclaré, elle devient
+`electrolyse_au_sel`; sinon la valeur est reprise telle quelle. Toute évolution
+de ce contrat doit préserver cette lecture, compléter les tests de migration et
+mettre à jour `docs/fichiers-json.md`.
 
 Avant un commit, exécuter :
 

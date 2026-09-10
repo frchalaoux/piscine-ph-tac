@@ -22,7 +22,7 @@ piscine-ph start --no-guided --force \
   --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 \
   --chlorine-min 1 --chlorine-max 4 \
   --electrolysis arretee --ph-regulator arrete \
-  --chlorine galets_stabilises --tablets consommes
+  --disinfection galets_stabilises --tablets consommes
 ```
 
 Pour un chlore stabilisé (trichlore ou dichlore), l'application applique au
@@ -51,7 +51,7 @@ observé : `en_place`, `consommes`, `suspendus` ou `non_necessaires`.
 | `--chlorine-max` | chlore libre positif, en ppm, supérieur ou égal au minimum | 4 ppm | Borne haute lue sur l'étiquette ; au-dessus, le programme indique de ne pas ajouter de chlore et de re-mesurer. |
 | `--electrolysis` | `inconnu`, `en_marche`, `arretee` | `inconnu` | État déclaré de la cellule. `arretee` ajoute une alerte : le chlore ne doit pas être supposé remonter automatiquement. |
 | `--ph-regulator` | `inconnu`, `en_marche`, `arrete` | `inconnu` | État déclaré du régulateur, sans le piloter. `arrete` indique qu'aucune correction automatique du pH n'est attendue. |
-| `--chlorine` | `inconnu`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | `inconnu` | Famille du désinfectant. Les deux valeurs stabilisées appliquent le plancher de 2 ppm et affichent les limites liées au CYA. |
+| `--disinfection` | `inconnu`, `electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | `inconnu` | Source active unique de désinfection. Les deux valeurs stabilisées appliquent le plancher de 2 ppm et affichent les limites liées au CYA. `--chlorine` reste accepté comme alias historique. |
 | `--tablets` | `inconnu`, `en_place`, `consommes`, `suspendus`, `non_necessaires` | `inconnu` | État observé du doseur de galets. `consommes` est signalé lorsque le chlore est bas ; aucune recharge n'est calculée. |
 
 `--volume-m3`, `--intermediate-ph`, `--bucket-l` et `--naoh-g-l` restent
@@ -98,7 +98,7 @@ appareil :
 
 ```bash
 piscine-ph treatment \
-  --electrolysis arretee --chlorine galets_stabilises \
+  --electrolysis arretee --disinfection galets_stabilises \
   --ph-regulator arrete --tablets consommes
 ```
 
