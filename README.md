@@ -7,13 +7,13 @@ Outil en ligne de commande pour suivre une correction progressive du pH et du TA
 Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'application :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
 ```
 
 Sous Windows, ouvrir PowerShell et exécuter :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
 ```
 
 Ensuite, depuis n'importe quel dossier (rouvrir le terminal après une première installation de `uv`) :
@@ -60,4 +60,4 @@ Utiliser `--force` uniquement pour créer une nouvelle archive malgré un protoc
 
 ## Mises à jour
 
-L'installation est figée sur la version `v0.1.2`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.
+L'installation est figée sur la version `v0.1.3`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.

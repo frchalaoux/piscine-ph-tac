@@ -26,7 +26,7 @@ Le projet demande Python 3.11 ou plus récent et l'outil `uv`. Même si Python n
 Ouvrir **Terminal**, puis exécuter une seule commande :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir le terminal. Démarrer ensuite l'application depuis n'importe quel dossier :
@@ -40,7 +40,7 @@ piscine-ph start
 Ouvrir **PowerShell**, puis exécuter une seule commande :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
@@ -58,7 +58,7 @@ piscine-ph start
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - L'application ne nécessite pas de dossier de projet local.
 
-L'installation est liée à la version `v0.1.2`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
+L'installation est liée à la version `v0.1.3`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
 
 ## Modifier les valeurs proposées par défaut
 
