@@ -12,10 +12,13 @@ Préparer :
 - un test TAC ;
 - la soude liquide indiquée à 300 g/L ;
 - du bicarbonate de sodium ;
+- l'acide sulfurique 15 % déclaré, seulement si le pH doit être abaissé ;
 - un seau compatible avec les produits, de 10 L par défaut ;
 - les protections indiquées sur la fiche de données de sécurité du produit.
 
 Ne pas utiliser la piscine pendant la correction. La soude est corrosive : ajouter la soude lentement dans l'eau, jamais l'eau dans la soude.
+Ne jamais mélanger l'acide sulfurique avec des galets au trichlore, ni les placer
+dans le même récipient ou doseur.
 
 ## Installer l'application
 
@@ -170,6 +173,46 @@ piscine-ph menu
 ```
 
 Le menu affiche l'étape active et propose seulement l'action logique suivante. Il s'arrête lorsqu'une action physique doit être réalisée : ajout de soude ou bicarbonate, circulation, puis mesure dans le bassin. Relancer `menu` après la mesure pour continuer.
+
+## Correction de pH vers le bas — acide sulfurique 15 %
+
+Choisir le protocole **Correction pH**, puis **Baisse pH**, et déclarer le pH,
+le TAC et le volume mesurés. Avant d'utiliser l'acide, arrêter ou isoler un
+régulateur pH en marche et suspendre les galets stabilisés encore actifs.
+
+```bash
+piscine-ph dose-acid
+```
+
+Pour le produit `IRRIPOOL PH- LIQUIDE 15 %`, la commande applique le ratio de
+la notice : 75 mL pour 10 m³ et une baisse de 0,1 pH. Elle limite donc chaque
+lot à 0,1 pH, même si l'écart à la cible est supérieur. Mettre la filtration en
+marche, répartir l'acide comme l'indique l'étiquette, attendre l'homogénéisation
+puis mesurer à nouveau dans le bassin :
+
+```bash
+piscine-ph measure-acid --ph 7.40 --tac 80
+```
+
+Si le pH est encore trop haut, l'application propose un seul nouveau lot. Si la
+cible est atteinte, elle indique explicitement de ne rien ajouter. Un lot
+préparé mais non versé peut seul être annulé avec `piscine-ph cancel-acid-dose`.
+
+## Désinfectant — galets stabilisés
+
+Le protocole désinfectant demande une mesure de chlore libre. Si elle est sous
+la plage déclarée, et si le CYA mesuré est inférieur à 50 ppm, `plan-tablets`
+peut proposer une charge initiale :
+
+```bash
+piscine-ph plan-tablets
+```
+
+Le profil `GCCHLLEC` utilise 1 galet pour 25 m³ comme repère de la notice ;
+pour les autres produits, fournir la valeur de l'emballage, par exemple
+`piscine-ph plan-tablets --m3-per-tablet 20`. Vérifier l'étiquette présente au
+bord du bassin : elle prévaut toujours. Enregistrer ensuite uniquement les
+galets effectivement posés avec `record-tablets`.
 
 ## Étape 1 — Remonter jusqu'à pH 6
 

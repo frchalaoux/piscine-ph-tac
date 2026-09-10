@@ -53,12 +53,12 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 
 | Champ | Type | Signification |
 | --- | --- | --- |
-| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 5 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
+| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 6 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
 | `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
-| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `surveillance_ph_haut`, `termine` ou `annule`. Les parcours pH bas et désinfectant utilisent l'étape de surveillance avec un `config.mode` distinct. |
+| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `acide_vers_cible`, `surveillance_ph_haut`, `termine` ou `annule`. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
 
@@ -79,7 +79,7 @@ Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_
 | --- | --- | --- |
 | `treatment.electrolysis_status` | `inconnu`, `en_marche`, `arretee` | Contextualise les alertes sur la tendance du pH. |
 | `treatment.disinfection_method` | `inconnu`, `electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | Source active unique de désinfection ; les deux valeurs stabilisées activent les avertissements CYA. |
-| `treatment.stabilized_tablet_product` | `inconnu`, `trichlore_multifonctions_gcchl4ec`, `trichlore_lent_gcchllec` | Profil FDS facultatif du galet réellement utilisé. Il affiche les incompatibilités ; il ne calcule pas de dose. |
+| `treatment.stabilized_tablet_product` | `inconnu`, `trichlore_multifonctions_gcchl4ec`, `trichlore_lent_gcchllec` | Profil FDS facultatif du galet réellement utilisé. Il affiche les incompatibilités et peut fournir une charge initiale issue d'un ratio d'étiquette confirmé. |
 | `stabilized_tablets` | liste | Ajouts de galets déclarés : `count`, `unit_mass_g` éventuel, `product_label`, `recorded_at`. Le nombre de galets ne sert pas à calculer le CYA. |
 | `cyanuric_acid_measurements` | liste | Mesures CYA réelles : `cya_ppm` et `recorded_at`. |
 | `water_measurements` | liste | Mesures sans ajout de produit des parcours de surveillance : `ph`, `tac_ppm`, `free_chlorine_ppm` facultatif hors désinfectant, date. |
@@ -88,15 +88,17 @@ Les modes archivés sont `correction_hausse_ph_tac`, `correction_hausse_tac`,
 `correction_baisse_ph`, `surveillance_desinfectant` et le mode historique
 `surveillance_ph_haut`. Pour la surveillance désinfectant, les bornes lues sur
 l'étiquette sont archivées sous `free_chlorine_min_ppm` et
-`free_chlorine_max_ppm`. Les parcours pH bas et désinfectant ne calculent pas
-de quantité d'acide ou de galets.
+`free_chlorine_max_ppm`. Le parcours pH bas prépare un lot d'acide selon le
+ratio archivé du produit, limité à 0,1 pH et confirmé par mesure. Le parcours
+désinfectant peut proposer une charge initiale de galets à partir du ratio
+explicitement confirmé sur l'étiquette.
 
-Les archives antérieures à la version 5 peuvent contenir
+Les archives antérieures à la version 6 peuvent contenir
 `treatment.chlorine_treatment`. Elles sont lues automatiquement : un ancien
 `chlore_non_stabilise` accompagné d'un état d'électrolyse connu devient
 `electrolyse_au_sel` ; les autres valeurs sont conservées comme source active.
 Lorsqu'une telle archive est enregistrée de nouveau, son numéro de schéma est
-porté à 5.
+porté à 6.
 
 ### Plan d’approvisionnement
 
@@ -122,16 +124,22 @@ porté à 5.
 
 ### Doses préparées et doses confirmées
 
+`pending_acid` contient un lot d'acide sulfurique 15 % préparé mais non versé,
+et `acid_doses` les lots confirmés par une mesure pH/TAC. Le cumul
+`cumulative_additions.sulfuric_acid_15_ml` ne compte que les lots confirmés.
+
 Les champs `pending_*` sont essentiels : une dose seulement préparée n’est pas considérée comme versée.
 
 | Champ | Présence | Contenu |
 | --- | --- | --- |
 | `pending_naoh` | objet ou `null` | Soude préparée, en attente de `measure`. Champs : `phase`, pH/TAC avant, `naoh_ml`, `water_l`, date. |
+| `pending_acid` | objet ou `null` | Acide sulfurique 15 % préparé, en attente de `measure-acid`. Champs : pH/TAC avant, `acid_ml`, cible du lot et date. |
 | `pending_bicarbonate` | objet ou `null` | Un seul lot de bicarbonate planifié, en attente de `measure-tac`. Champs : pH/TAC avant, `bicarbonate_kg` (lot), `bicarbonate_total_kg` (besoin calculé avant fractionnement), date. |
 | `naoh_doses` | liste | Doses de soude confirmées par une mesure après ajout. Chaque entrée ajoute `ph_after`, `tac_after_ppm`, `coherence`, `recorded_at`. |
+| `acid_doses` | liste | Lots d'acide confirmés par une mesure après ajout : pH/TAC avant et après, `acid_ml`, date. Aucun modèle de cohérence carbonate ne leur est appliqué. |
 | `bicarbonate_doses` | liste | Apports de bicarbonate confirmés, avec les mêmes mesures après ajout. |
 
-Une dose en attente est supprimée par `cancel-dose` (soude) ou `cancel-tac-plan` (bicarbonate) uniquement si elle n’a pas été versée. Dès que `measure` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul. Après chaque lot de bicarbonate, une nouvelle mesure et un nouveau `plan-tac` sont nécessaires avant de préparer le lot suivant.
+Une dose en attente est supprimée par `cancel-dose` (soude), `cancel-acid-dose` (acide) ou `cancel-tac-plan` (bicarbonate) uniquement si elle n’a pas été versée. Dès que `measure`, `measure-acid` ou `measure-tac` est exécuté, l’entrée est déplacée dans la liste correspondante et contribue au cumul. Après chaque lot de bicarbonate, une nouvelle mesure et un nouveau `plan-tac` sont nécessaires avant de préparer le lot suivant.
 
 ### Contrôle de cohérence
 
@@ -159,8 +167,8 @@ Dans une archive, rechercher d’abord ces clés :
 
 ```text
 step                 → où en est le protocole
-pending_naoh         → une soude est-elle seulement préparée ?
-naoh_doses           → quelles doses ont été confirmées ?
+pending_*            → un produit est-il seulement préparé ?
+*_doses              → quels apports ont été confirmés ?
 cumulative_additions → combien a réellement été comptabilisé ?
 treatment            → quel traitement est déclaré ?
 supply_estimate      → quel stock était conseillé à l’achat ?

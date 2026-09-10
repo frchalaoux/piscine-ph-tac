@@ -34,16 +34,24 @@ combustibles et de l'humidité, dans leur contenant fermé et adapté.
   traitement ; le JSON conserve celui qui est déclaré.
 - Le programme affiche l'incompatibilité avec l'acide sulfurique pour ces deux
   profils et l'inscrit dans le journal lors d'un ajout de galets.
-- Il ne calcule ni quantité d'acide sulfurique ni nombre de galets. Ces deux
-  valeurs dépendent de la notice du fabricant, de l'installation et des
-  mesures réelles.
+- Pour `IRRIPOOL PH- LIQUIDE 15 %` uniquement, `dose-acid` applique le ratio
+  du fabricant de 75 mL pour 10 m³ et une baisse de 0,1 pH. Chaque lot est
+  plafonné à 0,1 pH et doit être confirmé par `measure-acid` avant le suivant.
+  Le programme bloque aussi la correction manuelle si le régulateur pH ou des
+  galets stabilisés sont déclarés actifs.
+- `plan-tablets` propose seulement une charge initiale après une mesure de
+  chlore libre basse. Le profil `GCCHLLEC` emploie 1 galet pour 25 m³ ; pour
+  tout autre galet, le ratio de l'étiquette doit être fourni explicitement.
+  Cette proposition ne recharge jamais le doseur à la place de l'utilisateur.
 - Le parcours désinfectant demande une mesure de chlore libre. Il journalise
   les galets et le CYA mesuré, sans déduire artificiellement le CYA des galets.
 
 ## Ce qui reste à fournir pour un calcul de produit
 
 Une étiquette ou notice d'emploi du produit précis, avec son dosage et les
-conditions d'application, est indispensable. Même avec cette notice,
-l'application conservera des apports fractionnés et une re-mesure entre les
-ajouts ; elle ne doit jamais proposer de mélange ou d'ajout simultané d'acide
-et de galets au trichlore.
+conditions d'application, reste indispensable. La fiche produit du galet
+GCCHLLEC contient aussi une indication différente dans ses caractéristiques
+(1 galet pour 20 m³) : l'emballage présent au bord du bassin prévaut donc sur
+le ratio proposé. L'application conservera des apports fractionnés et une
+re-mesure entre les ajouts ; elle ne doit jamais proposer de mélange ou d'ajout
+simultané d'acide et de galets au trichlore.

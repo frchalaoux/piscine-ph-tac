@@ -1,6 +1,6 @@
 # piscine-ph
 
-Outil en ligne de commande pour suivre une correction progressive du pH et du TAC d'une piscine.
+Outil en ligne de commande pour suivre une correction progressive du pH, du TAC et du désinfectant d'une piscine.
 
 ## Installation et lancement
 
@@ -40,7 +40,10 @@ Les profils des produits déclarés, les FDS associées et les limites de sécur
 piscine-ph start
 piscine-ph protocols
 piscine-ph dose
+piscine-ph dose-acid
+piscine-ph measure-acid --ph 7.4 --tac 80
 piscine-ph cancel-dose
+piscine-ph cancel-acid-dose
 piscine-ph cancel-tac-plan
 piscine-ph correct-last-measurement --ph 4.5 --tac 50
 piscine-ph cancel-protocol
@@ -49,6 +52,7 @@ piscine-ph plan-tac --tac 50
 piscine-ph measure-tac --ph 6.1 --tac 80
 piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises
 piscine-ph record-tablets --count 2 --unit-mass-g 200
+piscine-ph plan-tablets
 piscine-ph measure-cya --cya 35
 piscine-ph tui
 piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4
@@ -62,6 +66,11 @@ piscine-ph json
 
 `piscine-ph start` reprend automatiquement le dernier protocole non terminé.
 Utiliser `--force` uniquement pour créer une nouvelle archive malgré un protocole actif.
+
+Pour une baisse de pH avec l'IRRIPOOL PH- LIQUIDE 15 %, le programme prépare
+un seul lot plafonné à 0,1 unité de pH, à confirmer par une mesure pH/TAC avant
+tout autre lot. Pour les galets, `plan-tablets` est une proposition issue de
+l'étiquette, jamais un ajout enregistré automatiquement.
 
 ## Mises à jour
 

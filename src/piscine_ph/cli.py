@@ -48,11 +48,12 @@ def show_protocol_catalog() -> None:
     typer.secho("PROTOCOLES DISPONIBLES", fg=typer.colors.GREEN, bold=True)
     typer.echo("1. Correction pH")
     typer.echo("   - Hausse pH : soude puis controle TAC ; doses en petits lots et mesure.")
-    typer.echo("   - Baisse pH : acide sulfurique 15 % ; dose selon l'etiquette, jamais calculee ici.")
+    typer.echo("   - Baisse pH : acide sulfurique 15 % ; lot etiquette limite a -0,1 pH puis mesure.")
     typer.echo("2. Correction TAC")
     typer.echo("   - Hausse TAC : bicarbonate calcule en lots, puis mesure de confirmation.")
     typer.echo("3. Desinfectant")
-    typer.echo("   - Galets stabilises : suivi du chlore libre, des galets et du CYA, sans nombre de galets calcule.")
+    typer.echo("   - Galets stabilises : suivi du chlore libre, des galets et du CYA.")
+    typer.echo("     Une charge initiale peut etre proposee uniquement depuis le ratio de l'etiquette.")
     typer.echo("     Profils FDS : GCCHL4EC multifonctions et GCCHLLEC chlore lent (trichlore).")
     typer.secho(
         "Securite : ne jamais melanger acide et galets au trichlore, ni les mettre dans le meme recipient/doseur.",
@@ -104,6 +105,7 @@ def show_cumulative_additions(state: ProtocolState) -> None:
     typer.echo(
         "Cumul verse : "
         f"NaOH {cumulative.naoh_solution_ml:.0f} mL ({cumulative.naoh_moles:.3f} mol), "
+        f"acide sulfurique 15 % {cumulative.sulfuric_acid_15_ml:.0f} mL, "
         f"NaHCO3 {cumulative.bicarbonate_kg:.2f} kg ({cumulative.bicarbonate_moles:.2f} mol)."
     )
     typer.echo(
@@ -336,6 +338,20 @@ def show_bicarbonate_plan(pending: PendingBicarbonatePlan) -> None:
         fg=typer.colors.YELLOW,
     )
     typer.echo("Ne pas ajouter le lot suivant avant cette mesure et le nouveau calcul.")
+
+
+def show_acid_plan(state: ProtocolState) -> None:
+    """Présente le lot acide et les garde-fous de la notice produit."""
+    pending = state.pending_acid
+    if pending is None:
+        return
+    typer.secho("Lot d'acide sulfurique 15 % prepare", fg=typer.colors.GREEN)
+    typer.echo(f"Verser au maximum {pending.acid_ml:.0f} mL, filtration en marche, devant les buses.")
+    typer.secho(
+        "Ne pas verser dans le skimmer ou un doseur de galets ; ne pas manipuler les galets en meme temps.",
+        fg=typer.colors.YELLOW,
+    )
+    typer.echo("Mesurer pH et TAC avant tout autre lot.")
 
 
 @app.command("protocols")
@@ -571,6 +587,8 @@ def status() -> None:
     )
     if state.pending_naoh:
         typer.echo(f"Dose NaOH en attente : {state.pending_naoh.naoh_ml:.0f} mL")
+    if state.pending_acid:
+        typer.echo(f"Lot acide sulfurique 15 % en attente : {state.pending_acid.acid_ml:.0f} mL")
     if state.pending_bicarbonate:
         typer.echo(
             f"Lot bicarbonate en attente : {state.pending_bicarbonate.bicarbonate_kg:.2f} kg"
@@ -681,6 +699,33 @@ def record_tablets(
     show_treatment(state)
 
 
+@app.command("plan-tablets")
+def plan_tablets(
+    m3_per_tablet: Annotated[
+        float | None,
+        typer.Option(
+            min=0.01,
+            help="Volume traite par galet, lu sur l'etiquette ; requis hors profil GCCHLLEC.",
+        ),
+    ] = None,
+) -> None:
+    """Propose une charge initiale de galets après mesure de chlore, sans la verser ni l'archiver."""
+    try:
+        state, count, ratio = service().tablet_guidance(m3_per_tablet)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho(f"Charge initiale issue du ratio declare : {count} galet(s).", fg=typer.colors.GREEN)
+    typer.echo(
+        f"Base : 1 galet pour {ratio:.0f} m3, bassin {state.config.pool_volume_m3:.0f} m3. "
+        "Confirmez l'etiquette, puis enregistrez seulement les galets reellement poses."
+    )
+    typer.secho(
+        "Ne pas ajouter de galet si le chlore n'est pas bas, et ne jamais les melanger avec l'acide.",
+        fg=typer.colors.YELLOW,
+    )
+
+
 @app.command("measure-cya")
 def measure_cya(
     cya: float = typer.Option(..., min=0, help="Acide cyanurique mesure, en ppm (mg/L)."),
@@ -730,6 +775,37 @@ def dose(naoh_ml: Annotated[float | None, typer.Option(min=0.01)] = None) -> Non
     show_next_command(state)
 
 
+@app.command("dose-acid")
+def dose_acid(acid_ml: Annotated[float | None, typer.Option(min=0.01)] = None) -> None:
+    """Prépare un lot d'acide sulfurique 15 % plafonné à -0,1 pH selon la notice."""
+    try:
+        state = service().prepare_sulfuric_acid(acid_ml)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    if state.pending_acid is None:
+        typer.secho("pH cible deja atteint : aucun acide n'est necessaire.", fg=typer.colors.GREEN)
+    else:
+        show_acid_plan(state)
+    show_next_command(state)
+
+
+@app.command("measure-acid")
+def measure_acid(
+    ph: Annotated[float, typer.Option(min=0.01, max=13.99)],
+    tac: Annotated[float, typer.Option(min=0.01)],
+) -> None:
+    """Enregistre pH/TAC après un lot d'acide sulfurique 15 %."""
+    try:
+        state = service().record_sulfuric_acid_measurement(ph, tac)
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho(f"Mesures apres acide enregistrees. Etape : {state.step}", fg=typer.colors.GREEN)
+    show_cumulative_additions(state)
+    show_next_command(state)
+
+
 @app.command("cancel-dose")
 def cancel_dose() -> None:
     """Annule une dose de NaOH préparée et non versée après confirmation explicite."""
@@ -750,6 +826,27 @@ def cancel_dose() -> None:
     typer.secho(
         "Dose de NaOH annulee. Les mesures precedentes sont conservees.", fg=typer.colors.GREEN
     )
+    show_next_command(state)
+
+
+@app.command("cancel-acid-dose")
+def cancel_acid_dose() -> None:
+    """Annule un lot d'acide non versé, après confirmation explicite."""
+    try:
+        state = service().active()
+        pending = state.pending_acid
+        if pending is None:
+            raise ValueError("Aucun lot d'acide en attente a annuler.")
+        if not typer.confirm(
+            f"Confirmer que les {pending.acid_ml:.0f} mL n'ont PAS ete verses dans le bassin ?"
+        ):
+            typer.echo("Annulation abandonnee.")
+            return
+        state = service().cancel_pending_acid()
+    except ValueError as error:
+        typer.echo(str(error))
+        raise typer.Exit(1)
+    typer.secho("Lot d'acide annule.", fg=typer.colors.GREEN)
     show_next_command(state)
 
 
@@ -891,8 +988,6 @@ def menu() -> None:
     if state.step is ProtocolStep.HIGH_PH_MONITORING:
         if state.config.mode is ProtocolMode.DISINFECTION_MONITORING:
             typer.echo("SURVEILLANCE DESINFECTANT — aucun nombre de galets n'est calcule.")
-        elif state.config.mode is ProtocolMode.LOWER_PH_MONITORING:
-            typer.echo("CORRECTION PH BAS — aucune dose d'acide sulfurique n'est calculee.")
         else:
             typer.echo("SURVEILLANCE PH HAUT — aucune dose d'acide ou de chlore n'est calculee.")
         show_water_actions(state)
@@ -927,6 +1022,19 @@ def menu() -> None:
         show_next_command(state)
         return
 
+    if state.pending_acid:
+        show_acid_plan(state)
+        show_next_command(state)
+        if not typer.confirm("Avez-vous deja mesure le pH et le TAC apres ce lot ?"):
+            return
+        ph = typer.prompt("pH mesure dans le bassin", type=float)
+        tac = typer.prompt("TAC mesure en ppm CaCO3 (pas de 10 ppm)", type=float)
+        state = protocol_service.record_sulfuric_acid_measurement(ph, tac)
+        typer.secho("Mesures apres acide enregistrees.", fg=typer.colors.GREEN)
+        show_cumulative_additions(state)
+        show_next_command(state)
+        return
+
     if state.pending_bicarbonate:
         typer.echo(
             "Ajouter uniquement le lot de bicarbonate affiche, puis attendre avant de mesurer."
@@ -950,6 +1058,12 @@ def menu() -> None:
         pending = state.pending_bicarbonate
         assert pending is not None
         show_bicarbonate_plan(pending)
+        show_next_command(state)
+        return
+
+    if state.step is ProtocolStep.ACID_TO_TARGET:
+        state = protocol_service.prepare_sulfuric_acid()
+        show_acid_plan(state)
         show_next_command(state)
         return
 

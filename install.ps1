@@ -1,9 +1,11 @@
-# Installe piscine-ph pour le compte courant (Windows PowerShell).
-# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
+# Installe la branche de test piscine-ph pour le compte courant (Windows PowerShell).
+# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive de la branche.
 $ErrorActionPreference = "Stop"
 
-$releaseVersion = "v0.2.2"
-$sourceUrl = "https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/$releaseVersion.tar.gz"
+$testBranch = "test-cli-windows"
+$sourceUrl = "https://github.com/frchalaoux/piscine-ph-tac/archive/refs/heads/$testBranch.tar.gz"
+
+Write-Host "Installation de la version de TEST piscine-ph ($testBranch)..." -ForegroundColor Yellow
 
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     $uvCommand = "uv"
@@ -31,8 +33,8 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 if (Get-Command piscine-ph -ErrorAction SilentlyContinue) {
-    Write-Host "piscine-ph est installe. Lancez : piscine-ph start"
+    Write-Host "Version de TEST installee. Lancez : piscine-ph start"
 }
 else {
-    Write-Host "piscine-ph est installe. Fermez et rouvrez PowerShell, puis lancez : piscine-ph start"
+    Write-Host "Version de TEST installee. Fermez et rouvrez PowerShell, puis lancez : piscine-ph start"
 }

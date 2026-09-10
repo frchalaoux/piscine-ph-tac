@@ -12,6 +12,7 @@ from math import ceil
 
 from .chemistry import BucketPreparation, ChemistryCalculator
 from .models import (
+    AcidDoseRecord,
     BicarbonateRecord,
     CoherenceCheck,
     CyanuricAcidMeasurement,
@@ -19,6 +20,7 @@ from .models import (
     ElectrolysisStatus,
     NaOHConcentrationSource,
     NaOHDoseRecord,
+    PendingAcidDose,
     PendingBicarbonatePlan,
     PendingNaOHDose,
     PhRegulatorStatus,
@@ -47,6 +49,11 @@ class ProtocolService:
         self.repository = repository
         self.chemistry = chemistry or ChemistryCalculator()
 
+    # Notice IRRIPOOL PH- LIQUIDE 15 % : 75 mL / 10 m³ / baisse de 0,1 pH.
+    # Un seul lot ne vise jamais plus de 0,1 pH afin d'imposer une re-mesure.
+    SULFURIC_ACID_15_ML_PER_10_M3_PER_0_1_PH = 75.0
+    MAX_ACID_BATCH_PH = 0.1
+
     def active(self) -> ProtocolState:
         """Retourne le protocole actif ou explique à l'appelant comment en créer un."""
         state = self.repository.active()
@@ -69,9 +76,29 @@ class ProtocolService:
             return "piscine-ph history"
         if state.pending_naoh:
             return "piscine-ph measure --ph VOTRE_PH --tac VOTRE_TAC"
+        if state.pending_acid:
+            return "piscine-ph measure-acid --ph VOTRE_PH --tac VOTRE_TAC"
         if state.pending_bicarbonate:
             return "piscine-ph measure-tac --ph VOTRE_PH --tac VOTRE_TAC"
         if state.step is ProtocolStep.HIGH_PH_MONITORING:
+            if (
+                state.config.mode is ProtocolMode.DISINFECTION_MONITORING
+                and state.treatment.disinfection_method is DisinfectionMethod.STABILIZED_TABLETS
+                and state.water_measurements
+            ):
+                latest_measurement = state.water_measurements[-1]
+                chlorine = latest_measurement.free_chlorine_ppm
+                cya_is_high = (
+                    bool(state.cyanuric_acid_measurements)
+                    and state.cyanuric_acid_measurements[-1].cya_ppm >= 50
+                )
+                if chlorine is not None and chlorine < state.config.free_chlorine_min_ppm and not cya_is_high:
+                    if (
+                        state.treatment.stabilized_tablet_product
+                        is StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC
+                    ):
+                        return "piscine-ph plan-tablets"
+                    return "piscine-ph plan-tablets --m3-per-tablet VALEUR_ETIQUETTE"
             chlorine_option = (
                 " --free-chlorine VOTRE_CHLORE"
                 if state.config.mode
@@ -83,6 +110,8 @@ class ProtocolService:
             )
         if state.step is ProtocolStep.TAC_TO_TARGET:
             return "piscine-ph plan-tac --tac VOTRE_TAC"
+        if state.step is ProtocolStep.ACID_TO_TARGET:
+            return "piscine-ph dose-acid"
         return "piscine-ph dose"
 
     def refresh_cumulative_additions(self, state: ProtocolState) -> None:
@@ -92,10 +121,12 @@ class ProtocolService:
         une annulation fasse dériver les quantités réellement comptabilisées.
         """
         naoh_ml = sum(dose.naoh_ml for dose in state.naoh_doses)
+        acid_ml = sum(dose.acid_ml for dose in state.acid_doses)
         bicarbonate_kg = sum(dose.bicarbonate_kg for dose in state.bicarbonate_doses)
         state.cumulative_additions = self.chemistry.cumulative_additions(
             state.config, naoh_ml, bicarbonate_kg
         )
+        state.cumulative_additions.sulfuric_acid_15_ml = acid_ml
 
     @staticmethod
     def treatment_warnings(state: ProtocolState) -> list[str]:
@@ -217,7 +248,12 @@ class ProtocolService:
                 "Aucune correction du TAC n'est indiquee par ce parcours."
             )
         if not state.water_measurements:
-            return actions + ["Mesurer le chlore libre avant de decider du traitement."]
+            if state.config.mode in {
+                ProtocolMode.HIGH_PH_MONITORING,
+                ProtocolMode.DISINFECTION_MONITORING,
+            }:
+                return actions + ["Mesurer le chlore libre avant de decider du traitement."]
+            return actions
 
         chlorine = state.water_measurements[-1].free_chlorine_ppm
         if chlorine is None:
@@ -225,8 +261,6 @@ class ProtocolService:
                 return actions + ["Mesurer le chlore libre avant de decider du traitement."]
             return actions
         minimum = state.config.free_chlorine_min_ppm
-        if state.treatment.uses_stabilized_chlorine:
-            minimum = max(minimum, 2.0)
         if chlorine < minimum:
             actions.append(
                 f"Decision chlore : chlore libre {chlorine:.1f} ppm sous la borne basse {minimum:.1f} ppm : "
@@ -403,6 +437,46 @@ class ProtocolService:
         self.repository.save(state)
         return state
 
+    def tablet_guidance(self, m3_per_tablet: float | None = None) -> tuple[ProtocolState, int, float]:
+        """Retourne une charge initiale de galets issue de l'étiquette, sans l'enregistrer.
+
+        Le galet n'est jamais rechargé automatiquement : sa dissolution dépend de
+        la température, de la filtration et du doseur. Une mesure de chlore libre
+        et une vérification du CYA restent donc préalables.
+        """
+        state = self.active()
+        if state.treatment.disinfection_method is not DisinfectionMethod.STABILIZED_TABLETS:
+            raise ValueError("Ce conseil est reserve aux galets stabilises declares dans treatment.")
+        if not state.water_measurements or state.water_measurements[-1].free_chlorine_ppm is None:
+            raise ValueError("Enregistrez d'abord une mesure de chlore libre avec record-water.")
+        chlorine = state.water_measurements[-1].free_chlorine_ppm
+        assert chlorine is not None
+        if chlorine >= state.config.free_chlorine_min_ppm:
+            raise ValueError(
+                "Le chlore libre est deja dans ou au-dessus de la plage declaree ; ne rechargez pas "
+                "les galets automatiquement."
+            )
+        if state.cyanuric_acid_measurements and state.cyanuric_acid_measurements[-1].cya_ppm >= 50:
+            raise ValueError(
+                "CYA a 50 ppm ou plus : ne pas planifier de galets stabilises ; suivre le renouvellement "
+                "d'eau et l'etiquette."
+            )
+        ratio = m3_per_tablet
+        if ratio is None:
+            if (
+                state.treatment.stabilized_tablet_product
+                is StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC
+            ):
+                ratio = 25.0
+            else:
+                raise ValueError(
+                    "Saisissez le volume par galet lu sur l'etiquette avec --m3-per-tablet ; "
+                    "aucun ratio fiable n'est archive pour ce produit."
+                )
+        if ratio <= 0:
+            raise ValueError("Le volume couvert par un galet doit etre positif.")
+        return state, ceil(state.config.pool_volume_m3 / ratio), ratio
+
     def record_cyanuric_acid_measurement(self, cya_ppm: float) -> ProtocolState:
         """Journalise une mesure réelle de CYA, sans l'inférer des galets."""
         state = self.active()
@@ -451,14 +525,17 @@ class ProtocolService:
                 ProtocolStep.TAC_TO_TARGET
                 if config.mode is ProtocolMode.RAISE_TAC
                 else (
+                    ProtocolStep.ACID_TO_TARGET
+                    if config.mode is ProtocolMode.LOWER_PH_MONITORING
+                    else (
                     ProtocolStep.HIGH_PH_MONITORING
                     if config.mode
                     in {
                         ProtocolMode.HIGH_PH_MONITORING,
-                        ProtocolMode.LOWER_PH_MONITORING,
                         ProtocolMode.DISINFECTION_MONITORING,
                     }
                     else ProtocolStep.PH_TO_INTERMEDIATE
+                    )
                 )
             ),
         )
@@ -481,8 +558,8 @@ class ProtocolService:
             )
         elif config.mode is ProtocolMode.LOWER_PH_MONITORING:
             state.add_event(
-                "Correction pH bas creee : aucune dose d'acide n'est calculee ; "
-                "suivre strictement la notice et ne jamais melanger avec le chlore stabilise"
+                "Correction pH bas creee : lots d'acide sulfurique 15 % limites a 0,1 pH, "
+                "avec mesure obligatoire et sans melange avec le chlore stabilise"
             )
         elif config.mode is ProtocolMode.DISINFECTION_MONITORING:
             state.add_event(
@@ -520,6 +597,101 @@ class ProtocolService:
         )
         for action in self.water_actions(state):
             state.add_event(f"Conclusion de surveillance : {action}")
+        self.repository.save(state)
+        return state
+
+    def prepare_sulfuric_acid(self, requested_ml: float | None = None) -> ProtocolState:
+        """Prépare un lot d'acide 15 % issu de la notice, jamais supérieur à -0,1 pH.
+
+        La quantité est un repère produit et non un modèle chimique du bassin.
+        Elle est donc plafonnée, sans second lot possible avant mesure pH/TAC.
+        """
+        state = self.active()
+        if state.step is not ProtocolStep.ACID_TO_TARGET:
+            raise ValueError("L'acide sulfurique n'est pas l'etape active du protocole.")
+        if state.pending_acid:
+            raise ValueError("Un lot d'acide est deja en attente de mesure.")
+        if state.treatment.ph_regulator_status is PhRegulatorStatus.RUNNING:
+            raise ValueError(
+                "Arretez ou isolez le regulateur pH avant une correction manuelle d'acide."
+            )
+        if (
+            state.treatment.disinfection_method is DisinfectionMethod.STABILIZED_TABLETS
+            and state.treatment.stabilized_tablet_status is StabilizedTabletStatus.ACTIVE
+        ):
+            raise ValueError(
+                "Suspendre ou retirer les galets au trichlore et le declarer avec treatment "
+                "avant tout ajout d'acide sulfurique."
+            )
+        gap = state.current_ph - state.config.target_ph
+        if gap <= 0:
+            state.step = ProtocolStep.COMPLETE
+            state.add_event("pH cible deja atteint : aucun acide prepare")
+            self.repository.save(state)
+            return state
+        correction_ph = min(gap, self.MAX_ACID_BATCH_PH)
+        maximum_ml = (
+            self.SULFURIC_ACID_15_ML_PER_10_M3_PER_0_1_PH
+            * (state.config.pool_volume_m3 / 10)
+            * (correction_ph / 0.1)
+        )
+        acid_ml = requested_ml if requested_ml is not None else maximum_ml
+        if acid_ml > maximum_ml + 1e-9:
+            raise ValueError(
+                f"Le lot ne peut pas exceder {maximum_ml:.0f} mL : la notice impose une correction "
+                "par etapes de 0,1 pH maximum."
+            )
+        state.pending_acid = PendingAcidDose(
+            ph_before=state.current_ph,
+            tac_before_ppm=state.current_tac_ppm,
+            acid_ml=acid_ml,
+            target_ph_for_batch=max(state.current_ph - correction_ph, state.config.target_ph),
+        )
+        state.add_event(
+            f"Lot acide sulfurique 15 % prepare : {acid_ml:.0f} mL pour une baisse cible maximale de "
+            f"{correction_ph:.1f} pH"
+        )
+        self.repository.save(state)
+        return state
+
+    def record_sulfuric_acid_measurement(self, ph: float, tac_ppm: float) -> ProtocolState:
+        """Confirme un lot acide avec mesures réelles et n'autorise ensuite qu'un nouveau petit lot."""
+        state = self.active()
+        self.validate_tac_measurement(state, tac_ppm)
+        pending = state.pending_acid
+        if pending is None:
+            raise ValueError("Aucun lot d'acide en attente.")
+        state.acid_doses.append(
+            AcidDoseRecord(
+                ph_before=pending.ph_before,
+                tac_before_ppm=pending.tac_before_ppm,
+                acid_ml=pending.acid_ml,
+                ph_after=ph,
+                tac_after_ppm=tac_ppm,
+            )
+        )
+        state.pending_acid = None
+        state.current_ph = ph
+        state.current_tac_ppm = tac_ppm
+        self.refresh_cumulative_additions(state)
+        if ph <= state.config.target_ph:
+            state.step = ProtocolStep.COMPLETE
+            state.add_event("pH cible atteint apres lot acide : ne pas ajouter d'acide supplementaire")
+        else:
+            state.add_event(
+                f"Mesures apres acide : pH {ph:.2f}, TAC {tac_ppm:.0f} ppm ; reevaluer un seul lot"
+            )
+        self.repository.save(state)
+        return state
+
+    def cancel_pending_acid(self) -> ProtocolState:
+        """Annule un lot d'acide non versé, sans masquer les mesures précédentes."""
+        state = self.active()
+        pending = state.pending_acid
+        if pending is None:
+            raise ValueError("Aucun lot d'acide en attente a annuler.")
+        state.pending_acid = None
+        state.add_event(f"Lot acide annule avant ajout : {pending.acid_ml:.0f} mL")
         self.repository.save(state)
         return state
 
@@ -633,6 +805,7 @@ class ProtocolService:
         """
         state = self.active()
         state.pending_naoh = None
+        state.pending_acid = None
         state.pending_bicarbonate = None
         state.step = ProtocolStep.CANCELLED
         state.add_event("Protocole annule par l'utilisateur")
@@ -648,18 +821,22 @@ class ProtocolService:
         """
         state = self.active()
         self.validate_tac_measurement(state, tac_ppm)
-        if state.pending_naoh or state.pending_bicarbonate:
+        if state.pending_naoh or state.pending_acid or state.pending_bicarbonate:
             raise ValueError("Annulez d'abord la dose preparee apres la mesure a corriger.")
 
         latest_naoh = state.naoh_doses[-1] if state.naoh_doses else None
+        latest_acid = state.acid_doses[-1] if state.acid_doses else None
         latest_bicarbonate = state.bicarbonate_doses[-1] if state.bicarbonate_doses else None
-        if latest_naoh is None and latest_bicarbonate is None:
+        if latest_naoh is None and latest_acid is None and latest_bicarbonate is None:
             raise ValueError("Aucune mesure enregistree a corriger.")
 
-        if latest_bicarbonate and (
-            latest_naoh is None or latest_bicarbonate.recorded_at > latest_naoh.recorded_at
-        ):
+        latest = max(
+            (record for record in (latest_naoh, latest_acid, latest_bicarbonate) if record is not None),
+            key=lambda record: record.recorded_at,
+        )
+        if latest is latest_bicarbonate:
             record = latest_bicarbonate
+            assert record is not None
             record.ph_after = ph
             record.tac_after_ppm = tac_ppm
             record.coherence = self.enrich_check_with_treatment(
@@ -682,9 +859,18 @@ class ProtocolService:
             else:
                 state.step = ProtocolStep.TAC_TO_TARGET
             product = "bicarbonate"
+        elif latest is latest_acid:
+            record = latest_acid
+            assert record is not None
+            record.ph_after = ph
+            record.tac_after_ppm = tac_ppm
+            state.step = (
+                ProtocolStep.COMPLETE if ph <= state.config.target_ph else ProtocolStep.ACID_TO_TARGET
+            )
+            product = "acide sulfurique"
         else:
-            assert latest_naoh is not None
             record = latest_naoh
+            assert record is not None
             record.ph_after = ph
             record.tac_after_ppm = tac_ppm
             record.coherence = self.enrich_check_with_treatment(

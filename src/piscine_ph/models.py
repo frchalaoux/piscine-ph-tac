@@ -22,6 +22,7 @@ class ProtocolStep(StrEnum):
     PH_TO_INTERMEDIATE = "naoh_vers_palier"
     TAC_TO_TARGET = "tac_vers_80"
     PH_TO_TARGET = "naoh_final"
+    ACID_TO_TARGET = "acide_vers_cible"
     HIGH_PH_MONITORING = "surveillance_ph_haut"
     COMPLETE = "termine"
     CANCELLED = "annule"
@@ -314,6 +315,27 @@ class NaOHDoseRecord(BaseModel):
     recorded_at: datetime = Field(default_factory=datetime.now)
 
 
+class PendingAcidDose(BaseModel):
+    """Lot d'acide sulfurique 15 % proposé par l'étiquette, avant re-mesure."""
+
+    ph_before: float
+    tac_before_ppm: float
+    acid_ml: float = Field(gt=0)
+    target_ph_for_batch: float = Field(gt=0, lt=14)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class AcidDoseRecord(BaseModel):
+    """Lot d'acide confirmé uniquement après mesure bassin."""
+
+    ph_before: float
+    tac_before_ppm: float
+    acid_ml: float
+    ph_after: float
+    tac_after_ppm: float
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
 class PendingBicarbonatePlan(BaseModel):
     """Lot de bicarbonate calculé, en attente de sa mesure de confirmation."""
 
@@ -351,6 +373,7 @@ class CumulativeAdditions(BaseModel):
 
     naoh_solution_ml: float = 0.0
     naoh_moles: float = 0.0
+    sulfuric_acid_15_ml: float = 0.0
     bicarbonate_kg: float = 0.0
     bicarbonate_moles: float = 0.0
     theoretical_tac_from_naoh_ppm: float = 0.0
@@ -366,7 +389,7 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 5
+    version: int = 6
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
@@ -379,8 +402,10 @@ class ProtocolState(BaseModel):
     current_tac_ppm: float
     initial_coherence: CoherenceCheck | None = None
     pending_naoh: PendingNaOHDose | None = None
+    pending_acid: PendingAcidDose | None = None
     pending_bicarbonate: PendingBicarbonatePlan | None = None
     naoh_doses: list[NaOHDoseRecord] = Field(default_factory=list)
+    acid_doses: list[AcidDoseRecord] = Field(default_factory=list)
     bicarbonate_doses: list[BicarbonateRecord] = Field(default_factory=list)
     stabilized_tablets: list[StabilizedTabletRecord] = Field(default_factory=list)
     cyanuric_acid_measurements: list[CyanuricAcidMeasurement] = Field(default_factory=list)
@@ -395,9 +420,9 @@ class ProtocolState(BaseModel):
         La conversion du contexte de traitement s'effectue dans
         :class:`TreatmentContext`. Conserver un numéro ancien après une écriture
         rendrait toutefois le JSON ambigu : une archive v4 pourrait alors
-        contenir les profils de galets introduits en v5.
+        contenir les lots d'acide sulfurique introduits en v6.
         """
-        self.version = max(self.version, 5)
+        self.version = max(self.version, 6)
         return self
 
     def add_event(self, event: str) -> None:

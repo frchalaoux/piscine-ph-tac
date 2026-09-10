@@ -88,7 +88,7 @@ def test_legacy_protocol_state_is_marked_with_the_current_schema_when_read(tmp_p
     migrated = repository.active()
 
     assert migrated is not None
-    assert migrated.version == 5
+    assert migrated.version == 6
     assert migrated.treatment.disinfection_method is DisinfectionMethod.SALT_ELECTROLYSIS
 
 
@@ -273,7 +273,7 @@ def test_high_ph_monitoring_archives_low_chlorine_and_stopped_equipment(tmp_path
     actions = service.water_actions(state)
 
     assert len(state.water_measurements) == 1
-    assert any("sous la borne basse 2.0 ppm" in action for action in actions)
+    assert any("sous la borne basse 1.0 ppm" in action for action in actions)
     assert any("TAC mesure 70 ppm" in action for action in actions)
     assert any("Electrolyse arretee" in action for action in actions)
     assert any("Galets declares consommes" in action for action in actions)
@@ -347,7 +347,7 @@ def test_tac_only_protocol_starts_at_tac_and_ends_after_confirmation(tmp_path) -
     assert any("protocole de correction TAC termine" in event.event for event in state.journal)
 
 
-def test_lower_ph_protocol_records_a_measurement_without_chlorine(tmp_path) -> None:
+def test_lower_ph_protocol_reserves_water_measurements_for_the_acid_cycle(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     service.start(
         ProtocolConfig(
@@ -357,11 +357,8 @@ def test_lower_ph_protocol_records_a_measurement_without_chlorine(tmp_path) -> N
         )
     )
 
-    state = service.record_water_measurement(ph=7.6, tac_ppm=80)
-    actions = service.water_actions(state)
-
-    assert state.water_measurements[-1].free_chlorine_ppm is None
-    assert any("Acide sulfurique 15 % declare" in action for action in actions)
+    with pytest.raises(ValueError, match="reservee aux protocoles de surveillance"):
+        service.record_water_measurement(ph=7.6, tac_ppm=80)
 
 
 def test_disinfection_protocol_requires_chlorine_and_warns_for_trichlor(tmp_path) -> None:
@@ -380,3 +377,126 @@ def test_disinfection_protocol_requires_chlorine_and_warns_for_trichlor(tmp_path
     state = service.record_water_measurement(ph=7.2, tac_ppm=80, free_chlorine_ppm=2.0)
 
     assert any("GCCHLLEC" in warning for warning in service.treatment_warnings(state))
+
+
+def test_sulfuric_acid_protocol_limits_a_batch_and_requires_measurement(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.LOWER_PH_MONITORING,
+            pool_volume_m3=46,
+            initial_ph=7.5,
+            target_ph=7.2,
+            initial_tac_ppm=80,
+        )
+    )
+
+    assert state.step is ProtocolStep.ACID_TO_TARGET
+    with pytest.raises(ValueError, match="ne peut pas exceder"):
+        service.prepare_sulfuric_acid(346)
+    state = service.prepare_sulfuric_acid()
+
+    assert state.pending_acid is not None
+    assert state.pending_acid.acid_ml == pytest.approx(345)
+
+    state = service.record_sulfuric_acid_measurement(ph=7.4, tac_ppm=80)
+
+    assert state.step is ProtocolStep.ACID_TO_TARGET
+    assert state.cumulative_additions.sulfuric_acid_15_ml == pytest.approx(345)
+    assert ProtocolService.next_command(state) == "piscine-ph dose-acid"
+
+
+def test_lower_ph_protocol_never_requests_a_chlorine_measurement(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.LOWER_PH_MONITORING,
+            initial_ph=7.5,
+            target_ph=7.2,
+            initial_tac_ppm=80,
+        )
+    )
+
+    assert not any("chlore libre" in action for action in service.water_actions(state))
+
+
+def test_sulfuric_acid_is_blocked_by_an_active_regulator_or_active_tablets(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    config = ProtocolConfig(
+        mode=ProtocolMode.LOWER_PH_MONITORING,
+        initial_ph=7.4,
+        target_ph=7.2,
+        initial_tac_ppm=80,
+    )
+    service.start(config, TreatmentContext(ph_regulator_status=PhRegulatorStatus.RUNNING))
+
+    with pytest.raises(ValueError, match="regulateur pH"):
+        service.prepare_sulfuric_acid()
+
+    service.start(
+        config,
+        TreatmentContext(
+            disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+            stabilized_tablet_status=StabilizedTabletStatus.ACTIVE,
+        ),
+        replace_active=True,
+    )
+
+    with pytest.raises(ValueError, match="galets au trichlore"):
+        service.prepare_sulfuric_acid()
+
+
+def test_last_acid_measurement_can_be_corrected_without_changing_the_dose(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.LOWER_PH_MONITORING,
+            pool_volume_m3=20,
+            initial_ph=7.4,
+            target_ph=7.2,
+            initial_tac_ppm=80,
+        )
+    )
+    service.prepare_sulfuric_acid()
+    service.record_sulfuric_acid_measurement(ph=7.3, tac_ppm=80)
+
+    state = service.correct_last_measurement(ph=7.2, tac_ppm=80)
+
+    assert state.step is ProtocolStep.COMPLETE
+    assert state.acid_doses[-1].acid_ml == pytest.approx(150)
+    assert state.acid_doses[-1].ph_after == pytest.approx(7.2)
+    assert state.cumulative_additions.sulfuric_acid_15_ml == pytest.approx(150)
+
+
+def test_tablet_guidance_uses_the_slow_trichlor_label_after_low_chlorine_measurement(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(
+        ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING, pool_volume_m3=46),
+        TreatmentContext(
+            disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+            stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
+        ),
+    )
+    service.record_water_measurement(ph=7.2, tac_ppm=80, free_chlorine_ppm=0.2)
+
+    _, count, ratio = service.tablet_guidance()
+
+    assert count == 2
+    assert ratio == 25
+    assert ProtocolService.next_command(service.active()) == "piscine-ph plan-tablets"
+
+
+def test_tablet_guidance_refuses_a_high_cya(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(
+        ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
+        TreatmentContext(
+            disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+            stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
+        ),
+    )
+    service.record_water_measurement(ph=7.2, tac_ppm=80, free_chlorine_ppm=0.2)
+    service.record_cyanuric_acid_measurement(50)
+
+    with pytest.raises(ValueError, match="CYA a 50 ppm"):
+        service.tablet_guidance()
