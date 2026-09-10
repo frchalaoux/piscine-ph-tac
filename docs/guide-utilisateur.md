@@ -43,7 +43,7 @@ Ouvrir **PowerShell**, puis exécuter une seule commande :
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.1/install.ps1 | iex
 ```
 
-Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Windows 10 et 11 incluent déjà Windows PowerShell ; Git n'est pas nécessaire, car l'application est téléchargée depuis l'archive de la version publiée. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
+Elle installe `uv`, puis Python 3.11 même si un Python plus ancien est déjà présent, et enfin `piscine-ph`. Windows 10 et 11 incluent déjà Windows PowerShell ; Git n'est pas nécessaire, car l'application est téléchargée depuis l'archive de la version publiée. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
 
 ```powershell
 piscine-ph start

@@ -18,7 +18,13 @@ else {
     $uvCommand = $uvPath
 }
 
-& $uvCommand tool install --reinstall $sourceUrl
+Write-Host "Installation de Python 3.11..."
+& $uvCommand python install 3.11
+if ($LASTEXITCODE -ne 0) {
+    throw "L'installation de Python 3.11 a échoué (code $LASTEXITCODE)."
+}
+
+& $uvCommand tool install --python 3.11 --reinstall $sourceUrl
 if ($LASTEXITCODE -ne 0) {
     throw "L'installation de piscine-ph a échoué (code $LASTEXITCODE)."
 }

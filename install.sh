@@ -28,7 +28,9 @@ if [ ! -x "$uv_command" ] && ! command -v "$uv_command" >/dev/null 2>&1; then
     exit 1
 fi
 
-"$uv_command" tool install --reinstall "$source_url"
+echo "Installation de Python 3.11..."
+"$uv_command" python install 3.11
+"$uv_command" tool install --python 3.11 --reinstall "$source_url"
 
 echo
 if command -v piscine-ph >/dev/null 2>&1; then
