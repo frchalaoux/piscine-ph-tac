@@ -53,12 +53,12 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 
 | Champ | Type | Signification |
 | --- | --- | --- |
-| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 4 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
+| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 5 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
 | `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
-| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `surveillance_ph_haut`, `termine` ou `annule`. |
+| `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `surveillance_ph_haut`, `termine` ou `annule`. Les parcours pH bas et désinfectant utilisent l'étape de surveillance avec un `config.mode` distinct. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
 
@@ -79,22 +79,24 @@ Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_
 | --- | --- | --- |
 | `treatment.electrolysis_status` | `inconnu`, `en_marche`, `arretee` | Contextualise les alertes sur la tendance du pH. |
 | `treatment.disinfection_method` | `inconnu`, `electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | Source active unique de désinfection ; les deux valeurs stabilisées activent les avertissements CYA. |
+| `treatment.stabilized_tablet_product` | `inconnu`, `trichlore_multifonctions_gcchl4ec`, `trichlore_lent_gcchllec` | Profil FDS facultatif du galet réellement utilisé. Il affiche les incompatibilités ; il ne calcule pas de dose. |
 | `stabilized_tablets` | liste | Ajouts de galets déclarés : `count`, `unit_mass_g` éventuel, `product_label`, `recorded_at`. Le nombre de galets ne sert pas à calculer le CYA. |
 | `cyanuric_acid_measurements` | liste | Mesures CYA réelles : `cya_ppm` et `recorded_at`. |
-| `water_measurements` | liste | Mesures sans ajout de produit du parcours `surveillance_ph_haut` : `ph`, `tac_ppm`, `free_chlorine_ppm`, date. |
+| `water_measurements` | liste | Mesures sans ajout de produit des parcours de surveillance : `ph`, `tac_ppm`, `free_chlorine_ppm` facultatif hors désinfectant, date. |
 
-Dans une archive de surveillance, `config.mode` vaut `surveillance_ph_haut` et
-les bornes lues sur l'étiquette du désinfectant sont archivées sous
-`free_chlorine_min_ppm` et `free_chlorine_max_ppm`. Cette archive ne contient
-pas de plan d'approvisionnement et les commandes de dose NaOH/bicarbonate sont
-inactives.
+Les modes archivés sont `correction_hausse_ph_tac`, `correction_hausse_tac`,
+`correction_baisse_ph`, `surveillance_desinfectant` et le mode historique
+`surveillance_ph_haut`. Pour la surveillance désinfectant, les bornes lues sur
+l'étiquette sont archivées sous `free_chlorine_min_ppm` et
+`free_chlorine_max_ppm`. Les parcours pH bas et désinfectant ne calculent pas
+de quantité d'acide ou de galets.
 
-Les archives antérieures à la version 4 peuvent contenir
+Les archives antérieures à la version 5 peuvent contenir
 `treatment.chlorine_treatment`. Elles sont lues automatiquement : un ancien
 `chlore_non_stabilise` accompagné d'un état d'électrolyse connu devient
 `electrolyse_au_sel` ; les autres valeurs sont conservées comme source active.
 Lorsqu'une telle archive est enregistrée de nouveau, son numéro de schéma est
-porté à 4.
+porté à 5.
 
 ### Plan d’approvisionnement
 

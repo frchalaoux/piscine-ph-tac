@@ -12,6 +12,7 @@ from piscine_ph.models import (
     ProtocolConfig,
     ProtocolMode,
     ProtocolStep,
+    StabilizedTabletProduct,
     StabilizedTabletStatus,
     TreatmentContext,
 )
@@ -87,7 +88,7 @@ def test_legacy_protocol_state_is_marked_with_the_current_schema_when_read(tmp_p
     migrated = repository.active()
 
     assert migrated is not None
-    assert migrated.version == 4
+    assert migrated.version == 5
     assert migrated.treatment.disinfection_method is DisinfectionMethod.SALT_ELECTROLYSIS
 
 
@@ -325,3 +326,57 @@ def test_high_ph_monitoring_records_when_measurements_need_no_correction(tmp_pat
     conclusions = [event.event for event in state.journal if event.event.startswith("Conclusion")]
     assert any("Aucune correction de pH n'est a effectuer" in conclusion for conclusion in conclusions)
     assert any("Aucune action de desinfection n'est a effectuer" in conclusion for conclusion in conclusions)
+
+
+def test_tac_only_protocol_starts_at_tac_and_ends_after_confirmation(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.RAISE_TAC,
+            initial_tac_ppm=60,
+            target_tac_ppm=80,
+        )
+    )
+
+    assert state.step is ProtocolStep.TAC_TO_TARGET
+
+    state = service.plan_bicarbonate(60)
+    state = service.record_bicarbonate_measurement(ph=7.2, tac_ppm=80)
+
+    assert state.step is ProtocolStep.COMPLETE
+    assert any("protocole de correction TAC termine" in event.event for event in state.journal)
+
+
+def test_lower_ph_protocol_records_a_measurement_without_chlorine(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.LOWER_PH_MONITORING,
+            initial_ph=7.6,
+            target_ph=7.2,
+        )
+    )
+
+    state = service.record_water_measurement(ph=7.6, tac_ppm=80)
+    actions = service.water_actions(state)
+
+    assert state.water_measurements[-1].free_chlorine_ppm is None
+    assert any("Acide sulfurique 15 % declare" in action for action in actions)
+
+
+def test_disinfection_protocol_requires_chlorine_and_warns_for_trichlor(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
+        TreatmentContext(
+            disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+            stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="chlore libre est requis"):
+        service.record_water_measurement(ph=7.2, tac_ppm=80)
+
+    state = service.record_water_measurement(ph=7.2, tac_ppm=80, free_chlorine_ppm=2.0)
+
+    assert any("GCCHLLEC" in warning for warning in service.treatment_warnings(state))

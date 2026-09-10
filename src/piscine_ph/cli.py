@@ -23,6 +23,7 @@ from .models import (
     ProtocolMode,
     ProtocolState,
     ProtocolStep,
+    StabilizedTabletProduct,
     StabilizedTabletStatus,
     TreatmentContext,
 )
@@ -30,7 +31,7 @@ from .repository import JsonProtocolRepository
 from .service import ProtocolService
 from .settings import SETTINGS
 
-app = typer.Typer(no_args_is_help=True, help="Suivi progressif de correction pH/TAC.")
+app = typer.Typer(no_args_is_help=True, help="Protocoles progressifs pH, TAC et desinfection.")
 
 
 def service(root: Path = Path("data/protocoles")) -> ProtocolService:
@@ -40,6 +41,23 @@ def service(root: Path = Path("data/protocoles")) -> ProtocolService:
     répertoire, alors que la CLI normale conserve ``data/protocoles``.
     """
     return ProtocolService(JsonProtocolRepository(root))
+
+
+def show_protocol_catalog() -> None:
+    """Présente les parcours et leurs limites avant tout ajout physique."""
+    typer.secho("PROTOCOLES DISPONIBLES", fg=typer.colors.GREEN, bold=True)
+    typer.echo("1. Correction pH")
+    typer.echo("   - Hausse pH : soude puis controle TAC ; doses en petits lots et mesure.")
+    typer.echo("   - Baisse pH : acide sulfurique 15 % ; dose selon l'etiquette, jamais calculee ici.")
+    typer.echo("2. Correction TAC")
+    typer.echo("   - Hausse TAC : bicarbonate calcule en lots, puis mesure de confirmation.")
+    typer.echo("3. Desinfectant")
+    typer.echo("   - Galets stabilises : suivi du chlore libre, des galets et du CYA, sans nombre de galets calcule.")
+    typer.echo("     Profils FDS : GCCHL4EC multifonctions et GCCHLLEC chlore lent (trichlore).")
+    typer.secho(
+        "Securite : ne jamais melanger acide et galets au trichlore, ni les mettre dans le meme recipient/doseur.",
+        fg=typer.colors.YELLOW,
+    )
 
 
 def show_check(state: ProtocolState) -> None:
@@ -103,7 +121,8 @@ def show_treatment(state: ProtocolState) -> None:
         f"desinfection active {treatment.disinfection_method.value}.\n"
         f"Electrolyseur au sel : {treatment.electrolysis_status.value}.\n"
         f"Regulateur pH : {treatment.ph_regulator_status.value}.\n"
-        f"Doseur de galets stabilises : {treatment.stabilized_tablet_status.value}."
+        f"Doseur de galets stabilises : {treatment.stabilized_tablet_status.value}.\n"
+        f"Profil galets : {treatment.stabilized_tablet_product.value}."
     )
     if state.stabilized_tablets:
         count = sum(record.count for record in state.stabilized_tablets)
@@ -121,10 +140,14 @@ def show_water_actions(state: ProtocolState) -> None:
     """Affiche le dernier constat de surveillance sans le transformer en dosage."""
     if state.water_measurements:
         measurement = state.water_measurements[-1]
+        chlorine = (
+            f", chlore libre {measurement.free_chlorine_ppm:.1f} ppm"
+            if measurement.free_chlorine_ppm is not None
+            else ""
+        )
         typer.echo(
             "Derniere mesure eau : "
-            f"pH {measurement.ph:.2f}, TAC {measurement.tac_ppm:.0f} ppm, "
-            f"chlore libre {measurement.free_chlorine_ppm:.1f} ppm."
+            f"pH {measurement.ph:.2f}, TAC {measurement.tac_ppm:.0f} ppm{chlorine}."
         )
     for action in ProtocolService.water_actions(state):
         typer.secho(f"Surveillance : {action}", fg=typer.colors.YELLOW)
@@ -315,17 +338,31 @@ def show_bicarbonate_plan(pending: PendingBicarbonatePlan) -> None:
     typer.echo("Ne pas ajouter le lot suivant avant cette mesure et le nouveau calcul.")
 
 
+@app.command("protocols")
+def protocols() -> None:
+    """Liste les familles de protocoles, leur préparation et leurs limites."""
+    show_protocol_catalog()
+
+
 @app.command()
 def start(
     mode: Annotated[
         ProtocolMode,
-        typer.Option(help="Parcours : correction_hausse_ph_tac ou surveillance_ph_haut."),
+        typer.Option(
+            help=(
+                "Parcours : correction_hausse_ph_tac, correction_hausse_tac, "
+                "correction_baisse_ph, surveillance_desinfectant ou surveillance_ph_haut."
+            )
+        ),
     ] = ProtocolMode.RAISE_PH_TAC,
     volume_m3: float = typer.Option(SETTINGS.protocol.pool_volume_m3, min=0.01),
     initial_ph: float = typer.Option(SETTINGS.protocol.initial_ph, min=0.01, max=13.99),
     intermediate_ph: float = typer.Option(SETTINGS.protocol.intermediate_ph, min=0.01, max=13.99),
     target_ph: float = typer.Option(SETTINGS.protocol.target_ph, min=0.01, max=13.99),
     initial_tac: float = typer.Option(SETTINGS.protocol.initial_tac_ppm, min=0.01),
+    target_tac: float = typer.Option(
+        SETTINGS.protocol.target_tac_ppm, min=0.01, help="TAC cible en ppm CaCO3."
+    ),
     bucket_l: float = typer.Option(SETTINGS.protocol.bucket_volume_l, min=0.01),
     electrolysis: Annotated[
         ElectrolysisStatus, typer.Option(help="Etat initial : inconnu, en_marche ou arretee.")
@@ -351,6 +388,15 @@ def start(
             help="Etat des galets : inconnu, en_place, consommes, suspendus ou non_necessaires."
         ),
     ] = StabilizedTabletStatus.UNKNOWN,
+    tablet_product: Annotated[
+        StabilizedTabletProduct,
+        typer.Option(
+            help=(
+                "Profil facultatif : trichlore_multifonctions_gcchl4ec seulement si ce produit "
+                "est bien celui du doseur."
+            )
+        ),
+    ] = StabilizedTabletProduct.UNKNOWN,
     chlorine_min: float = typer.Option(
         1.0, min=0, help="Borne basse de chlore libre issue de l'etiquette, en ppm."
     ),
@@ -377,27 +423,52 @@ def start(
         if guided and (existing is None or force):
             typer.secho("QUESTIONNAIRE DE DEMARRAGE", fg=typer.colors.GREEN, bold=True)
             typer.echo("Les valeurs entrees seront archivees avec ce protocole.")
-            mode_choice = prompted_choice(
-                "Quel parcours utiliser ?",
-                ["Correction pH/TAC vers le haut", "Surveillance d'un pH au-dessus de la cible"],
+            show_protocol_catalog()
+            family = prompted_choice(
+                "Quelle famille de protocole voulez-vous ouvrir ?",
+                ["Correction de pH", "Correction de TAC", "Desinfectant"],
             )
-            mode = (
-                ProtocolMode.RAISE_PH_TAC if mode_choice == 1 else ProtocolMode.HIGH_PH_MONITORING
-            )
-            volume_m3 = typer.prompt("Volume du bassin en m3", default=volume_m3, type=float)
+            if family == 1:
+                ph_path = prompted_choice(
+                    "Quel parcours pH ?",
+                    [
+                        "Remonter le pH avec la soude",
+                        "Abaisser le pH avec l'acide sulfurique 15 %",
+                        "Surveiller un pH haut sans dosage",
+                    ],
+                )
+                mode = {
+                    1: ProtocolMode.RAISE_PH_TAC,
+                    2: ProtocolMode.LOWER_PH_MONITORING,
+                    3: ProtocolMode.HIGH_PH_MONITORING,
+                }[ph_path]
+            elif family == 2:
+                mode = ProtocolMode.RAISE_TAC
+            else:
+                mode = ProtocolMode.DISINFECTION_MONITORING
+
             initial_ph = typer.prompt("pH mesure au depart", default=initial_ph, type=float)
             initial_tac = typer.prompt("TAC mesure en ppm CaCO3", default=initial_tac, type=float)
-            target_ph = typer.prompt("pH cible", default=target_ph, type=float)
-            chlorine_min = typer.prompt(
-                "Borne basse chlore libre selon l'etiquette, en ppm",
-                default=chlorine_min,
-                type=float,
-            )
-            chlorine_max = typer.prompt(
-                "Borne haute chlore libre selon l'etiquette, en ppm",
-                default=chlorine_max,
-                type=float,
-            )
+            if mode in {ProtocolMode.RAISE_PH_TAC, ProtocolMode.LOWER_PH_MONITORING, ProtocolMode.HIGH_PH_MONITORING}:
+                target_ph = typer.prompt("pH cible", default=target_ph, type=float)
+            if mode in {ProtocolMode.RAISE_PH_TAC, ProtocolMode.RAISE_TAC}:
+                volume_m3 = typer.prompt("Volume du bassin en m3", default=volume_m3, type=float)
+            if mode is ProtocolMode.RAISE_TAC:
+                initial_tac = typer.prompt(
+                    "TAC initial en ppm CaCO3", default=initial_tac, type=float
+                )
+                target_tac = typer.prompt("TAC cible en ppm CaCO3", default=target_tac, type=float)
+            if mode is ProtocolMode.DISINFECTION_MONITORING:
+                chlorine_min = typer.prompt(
+                    "Borne basse chlore libre selon l'etiquette, en ppm",
+                    default=chlorine_min,
+                    type=float,
+                )
+                chlorine_max = typer.prompt(
+                    "Borne haute chlore libre selon l'etiquette, en ppm",
+                    default=chlorine_max,
+                    type=float,
+                )
             if mode is ProtocolMode.RAISE_PH_TAC:
                 intermediate_ph = typer.prompt(
                     "Palier pH avant correction TAC", default=intermediate_ph, type=float
@@ -409,6 +480,25 @@ def start(
                 percent = None
                 density = None
             treatment, initial_cya = prompt_treatment_context()
+            if treatment.disinfection_method is DisinfectionMethod.STABILIZED_TABLETS:
+                product_choice = prompted_choice(
+                    "Quel galet utilisez-vous ?",
+                    [
+                        "GCCHL4EC - chlore lent multifonctions eco",
+                        "GCCHLLEC - chlore lent eco",
+                        "Autre ou inconnu",
+                    ],
+                )
+                if product_choice != 3:
+                    treatment = treatment.model_copy(
+                        update={
+                            "stabilized_tablet_product": (
+                                StabilizedTabletProduct.TRICHLOR_MULTIFUNCTION_GCCHL4EC
+                                if product_choice == 1
+                                else StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC
+                            )
+                        }
+                    )
         else:
             concentration = naoh_g_l or SETTINGS.protocol.naoh_concentration_g_l
             source = (
@@ -423,7 +513,9 @@ def start(
                 disinfection_method=disinfection,
                 ph_regulator_status=ph_regulator,
                 stabilized_tablet_status=tablets,
+                stabilized_tablet_product=tablet_product,
             )
+            target_tac = SETTINGS.protocol.target_tac_ppm
         config = ProtocolConfig(
             mode=mode,
             pool_volume_m3=volume_m3,
@@ -431,6 +523,7 @@ def start(
             intermediate_ph=intermediate_ph,
             target_ph=target_ph,
             initial_tac_ppm=initial_tac,
+            target_tac_ppm=target_tac,
             bucket_volume_l=bucket_l,
             naoh_concentration_g_l=concentration,
             naoh_concentration_source=source,
@@ -546,10 +639,21 @@ def treatment(
             help="Etat des galets : inconnu, en_place, consommes, suspendus ou non_necessaires (omettre pour conserver)."
         ),
     ] = None,
+    tablet_product: Annotated[
+        StabilizedTabletProduct | None,
+        typer.Option(
+            help=(
+                "Profil des galets ; utiliser trichlore_multifonctions_gcchl4ec uniquement "
+                "pour ce produit precis."
+            )
+        ),
+    ] = None,
 ) -> None:
     """Déclare le traitement en cours afin de contextualiser les alertes pH/TAC."""
     try:
-        state = service().set_treatment(electrolysis, disinfection, ph_regulator, tablets)
+        state = service().set_treatment(
+            electrolysis, disinfection, ph_regulator, tablets, tablet_product
+        )
     except ValueError as error:
         typer.echo(str(error))
         raise typer.Exit(1)
@@ -595,7 +699,9 @@ def measure_cya(
 def record_water(
     ph: Annotated[float, typer.Option(min=0.01, max=13.99)],
     tac: Annotated[float, typer.Option(min=0.01)],
-    free_chlorine: Annotated[float, typer.Option("--free-chlorine", min=0)],
+    free_chlorine: Annotated[
+        float | None, typer.Option("--free-chlorine", min=0, help="Requis en protocole desinfectant.")
+    ] = None,
 ) -> None:
     """Archive une mesure pH/TAC/chlore sans préparer ni compter un produit."""
     try:
@@ -783,11 +889,21 @@ def menu() -> None:
         return
 
     if state.step is ProtocolStep.HIGH_PH_MONITORING:
-        typer.echo("SURVEILLANCE PH HAUT — aucune dose d'acide ou de chlore n'est calculee.")
+        if state.config.mode is ProtocolMode.DISINFECTION_MONITORING:
+            typer.echo("SURVEILLANCE DESINFECTANT — aucun nombre de galets n'est calcule.")
+        elif state.config.mode is ProtocolMode.LOWER_PH_MONITORING:
+            typer.echo("CORRECTION PH BAS — aucune dose d'acide sulfurique n'est calculee.")
+        else:
+            typer.echo("SURVEILLANCE PH HAUT — aucune dose d'acide ou de chlore n'est calculee.")
         show_water_actions(state)
         ph = typer.prompt("pH mesure dans le bassin", type=float)
         tac = typer.prompt("TAC mesure en ppm CaCO3 (pas de 10 ppm)", type=float)
-        chlorine = typer.prompt("Chlore libre mesure en ppm", type=float)
+        chlorine = None
+        if state.config.mode in {
+            ProtocolMode.HIGH_PH_MONITORING,
+            ProtocolMode.DISINFECTION_MONITORING,
+        }:
+            chlorine = typer.prompt("Chlore libre mesure en ppm", type=float)
         try:
             state = protocol_service.record_water_measurement(ph, tac, chlorine)
         except ValueError as error:

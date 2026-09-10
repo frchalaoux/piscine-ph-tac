@@ -1,9 +1,10 @@
 #!/bin/sh
 # Installe piscine-ph pour le compte courant (macOS ou Linux).
+# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 set -eu
 
 release_version="v0.1.3"
-repository_url="git+https://github.com/frchalaoux/piscine-ph-tac.git@${release_version}"
+source_url="https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/${release_version}.tar.gz"
 
 if command -v uv >/dev/null 2>&1; then
     uv_command="uv"
@@ -27,7 +28,7 @@ if [ ! -x "$uv_command" ] && ! command -v "$uv_command" >/dev/null 2>&1; then
     exit 1
 fi
 
-"$uv_command" tool install --reinstall "$repository_url"
+"$uv_command" tool install --reinstall "$source_url"
 
 echo
 if command -v piscine-ph >/dev/null 2>&1; then

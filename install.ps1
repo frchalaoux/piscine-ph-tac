@@ -1,8 +1,9 @@
 # Installe piscine-ph pour le compte courant (Windows PowerShell).
+# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 $ErrorActionPreference = "Stop"
 
 $releaseVersion = "v0.1.3"
-$repositoryUrl = "git+https://github.com/frchalaoux/piscine-ph-tac.git@$releaseVersion"
+$sourceUrl = "https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/$releaseVersion.tar.gz"
 
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     $uvCommand = "uv"
@@ -17,7 +18,7 @@ else {
     $uvCommand = $uvPath
 }
 
-& $uvCommand tool install --reinstall $repositoryUrl
+& $uvCommand tool install --reinstall $sourceUrl
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }

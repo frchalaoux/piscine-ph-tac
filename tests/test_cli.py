@@ -31,3 +31,13 @@ def test_json_command_rejects_an_unknown_archive(tmp_path, monkeypatch) -> None:
 
     assert result.exit_code == 1
     assert "Archive introuvable" in result.output
+
+
+def test_protocols_command_lists_the_three_families_and_safety_limit() -> None:
+    result = CliRunner().invoke(cli.app, ["protocols"])
+
+    assert result.exit_code == 0
+    assert "Correction pH" in result.output
+    assert "Correction TAC" in result.output
+    assert "Desinfectant" in result.output
+    assert "ne jamais melanger acide et galets au trichlore" in result.output

@@ -43,7 +43,7 @@ Ouvrir **PowerShell**, puis exécuter une seule commande :
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
 ```
 
-Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
+Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Windows 10 et 11 incluent déjà Windows PowerShell ; Git n'est pas nécessaire, car l'application est téléchargée depuis l'archive de la version publiée. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
 
 ```powershell
 piscine-ph start
@@ -54,6 +54,8 @@ piscine-ph start
 - `uv : commande introuvable` : relancer la commande d'installation ci-dessus. Elle installe `uv` pour le compte utilisateur.
 - `piscine-ph : commande introuvable` : fermer totalement le terminal, l'ouvrir à nouveau, puis réessayer. L'installateur ajoute normalement le répertoire des outils au `PATH`.
 - `Python introuvable` : relancer la commande d'installation ; `uv` téléchargera une version compatible.
+- `PowerShell introuvable` : sur Windows 10/11, rechercher **Windows PowerShell** dans le menu Démarrer. Sur une installation Windows inhabituelle où il serait absent, l'installer d'abord depuis Microsoft ou demander l'aide de l'administrateur : le script ne peut pas installer le terminal qui l'exécute.
+- `git : commande introuvable` : aucun problème ; Git n'est pas requis pour installer ou utiliser l'application.
 - Erreur de réseau : reconnecter l'ordinateur puis relancer la même commande ; `uv` reprendra les téléchargements nécessaires.
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - L'application ne nécessite pas de dossier de projet local.

@@ -10,7 +10,7 @@ Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'appl
 curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
 ```
 
-Sous Windows, ouvrir PowerShell et exécuter :
+Sous Windows 10 ou 11, ouvrir Windows PowerShell et exécuter (Git n'est pas nécessaire) :
 
 ```powershell
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
@@ -32,11 +32,13 @@ La structure et la lecture des paramètres et archives sont détaillées dans la
 Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
 Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
 Le cas « pH haut, TAC à confirmer et chlore faible ou fort » est décrit dans le [guide de surveillance](docs/surveillance-ph-haut-chlore.md).
+Les profils des produits déclarés, les FDS associées et les limites de sécurité sont réunis dans le [guide produits et sécurité](docs/produits-et-securite.md).
 
 ## Commandes principales
 
 ```bash
 piscine-ph start
+piscine-ph protocols
 piscine-ph dose
 piscine-ph cancel-dose
 piscine-ph cancel-tac-plan
@@ -51,6 +53,9 @@ piscine-ph measure-cya --cya 35
 piscine-ph tui
 piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4
 piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
+piscine-ph start --no-guided --force --mode correction_hausse_tac --initial-tac 60 --target-tac 80
+piscine-ph start --no-guided --force --mode correction_baisse_ph --initial-ph 7.6 --target-ph 7.2
+piscine-ph start --no-guided --force --mode surveillance_desinfectant --disinfection galets_stabilises --tablet-product trichlore_lent_gcchllec
 piscine-ph history
 piscine-ph json
 ```
