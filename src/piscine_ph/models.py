@@ -22,8 +22,16 @@ class ProtocolStep(StrEnum):
     PH_TO_INTERMEDIATE = "naoh_vers_palier"
     TAC_TO_TARGET = "tac_vers_80"
     PH_TO_TARGET = "naoh_final"
+    HIGH_PH_MONITORING = "surveillance_ph_haut"
     COMPLETE = "termine"
     CANCELLED = "annule"
+
+
+class ProtocolMode(StrEnum):
+    """Parcours disponibles dans une archive de suivi."""
+
+    RAISE_PH_TAC = "correction_hausse_ph_tac"
+    HIGH_PH_MONITORING = "surveillance_ph_haut"
 
 
 class ElectrolysisStatus(StrEnum):
@@ -34,13 +42,41 @@ class ElectrolysisStatus(StrEnum):
     STOPPED = "arretee"
 
 
+class PhRegulatorStatus(StrEnum):
+    """État déclaré du régulateur de pH, sans le piloter."""
+
+    UNKNOWN = "inconnu"
+    RUNNING = "en_marche"
+    STOPPED = "arrete"
+
+
+class StabilizedTabletStatus(StrEnum):
+    """État observé des galets dans le doseur ; ce n'est pas une dose calculée."""
+
+    UNKNOWN = "inconnu"
+    ACTIVE = "en_place"
+    CONSUMED = "consommes"
+    PAUSED = "suspendus"
+    NOT_NEEDED = "non_necessaires"
+
+
 class ChlorineTreatment(StrEnum):
-    """Famille de désinfectant déclarée pour contextualiser le modèle pH/TAC."""
+    """Ancienne famille de chlore, conservée pour lire les archives v1-v3."""
 
     UNKNOWN = "inconnu"
     STABILIZED_TABLETS = "galets_stabilises"
     STABILIZED_DICHLOR = "dichlore_stabilise"
     UNSTABILIZED = "chlore_non_stabilise"
+
+
+class DisinfectionMethod(StrEnum):
+    """Source de désinfection active, qui ne peut être choisie qu'une fois."""
+
+    UNKNOWN = "inconnu"
+    SALT_ELECTROLYSIS = "electrolyse_au_sel"
+    STABILIZED_TABLETS = "galets_stabilises"
+    STABILIZED_DICHLOR = "dichlore_stabilise"
+    UNSTABILIZED_CHLORINE = "chlore_non_stabilise"
 
 
 class NaOHConcentrationSource(StrEnum):
@@ -60,7 +96,44 @@ class TreatmentContext(BaseModel):
     """
 
     electrolysis_status: ElectrolysisStatus = ElectrolysisStatus.UNKNOWN
-    chlorine_treatment: ChlorineTreatment = ChlorineTreatment.UNKNOWN
+    disinfection_method: DisinfectionMethod = DisinfectionMethod.UNKNOWN
+    ph_regulator_status: PhRegulatorStatus = PhRegulatorStatus.UNKNOWN
+    stabilized_tablet_status: StabilizedTabletStatus = StabilizedTabletStatus.UNKNOWN
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_chlorine_treatment(cls, data: object) -> object:
+        """Convertit l'ancien champ indépendant en source active unique.
+
+        Les archives précédentes pouvaient déclarer simultanément un chlore non
+        stabilisé et une électrolyse. Cette combinaison représentait en pratique
+        une électrolyse au sel ; elle est donc migrée sans perdre le contexte.
+        """
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        if "disinfection_method" in values:
+            values.pop("chlorine_treatment", None)
+            return values
+        legacy = values.pop("chlorine_treatment", ChlorineTreatment.UNKNOWN.value)
+        legacy_value = str(legacy)
+        electrolysis = values.get("electrolysis_status", ElectrolysisStatus.UNKNOWN.value)
+        if (
+            legacy_value == ChlorineTreatment.UNSTABILIZED.value
+            and str(electrolysis) != ElectrolysisStatus.UNKNOWN.value
+        ):
+            values["disinfection_method"] = DisinfectionMethod.SALT_ELECTROLYSIS.value
+            return values
+        values["disinfection_method"] = legacy_value
+        return values
+
+    @property
+    def uses_stabilized_chlorine(self) -> bool:
+        """Indique si la source active introduit du CYA."""
+        return self.disinfection_method in {
+            DisinfectionMethod.STABILIZED_TABLETS,
+            DisinfectionMethod.STABILIZED_DICHLOR,
+        }
 
 
 class StabilizedTabletRecord(BaseModel):
@@ -76,6 +149,15 @@ class CyanuricAcidMeasurement(BaseModel):
     """Mesure déclarée de stabilisant (CYA), en mg/L ou ppm équivalents."""
 
     cya_ppm: float = Field(ge=0)
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
+class WaterMeasurement(BaseModel):
+    """Mesure sans ajout de produit, employée en surveillance pH haut."""
+
+    ph: float = Field(gt=0, lt=14)
+    tac_ppm: float = Field(gt=0)
+    free_chlorine_ppm: float = Field(ge=0)
     recorded_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -98,6 +180,7 @@ class ProtocolConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    mode: ProtocolMode = ProtocolMode.RAISE_PH_TAC
     pool_volume_m3: float = Field(default=SETTINGS.protocol.pool_volume_m3, gt=0)
     initial_ph: float = Field(default=SETTINGS.protocol.initial_ph, gt=0, lt=14)
     intermediate_ph: float = Field(default=SETTINGS.protocol.intermediate_ph, gt=0, lt=14)
@@ -112,12 +195,23 @@ class ProtocolConfig(BaseModel):
     naoh_concentration_source: NaOHConcentrationSource = NaOHConcentrationSource.DEFAULT
     naoh_label_percent: float | None = Field(default=None, gt=0, le=100)
     naoh_density_g_ml: float | None = Field(default=None, gt=0)
+    free_chlorine_min_ppm: float = Field(default=1.0, ge=0)
+    free_chlorine_max_ppm: float = Field(default=4.0, gt=0)
 
     @model_validator(mode="after")
     def validate_targets(self) -> ProtocolConfig:
         """Vérifie l'ordre des pH et la résolution réellement disponible du TAC."""
-        if not self.initial_ph < self.intermediate_ph < self.target_ph:
-            raise ValueError("Les pH doivent respecter : initial < palier < cible.")
+        if self.mode is ProtocolMode.RAISE_PH_TAC:
+            if not self.initial_ph < self.intermediate_ph < self.target_ph:
+                raise ValueError("Les pH doivent respecter : initial < palier < cible.")
+        elif self.initial_ph <= self.target_ph:
+            raise ValueError(
+                "En surveillance pH haut, le pH initial doit etre strictement superieur a la cible."
+            )
+        if self.free_chlorine_min_ppm > self.free_chlorine_max_ppm:
+            raise ValueError(
+                "La borne basse de chlore libre doit etre inferieure ou egale a la borne haute."
+            )
         for label, value in (
             ("TAC initial", self.initial_tac_ppm),
             ("TAC cible", self.target_tac_ppm),
@@ -236,7 +330,7 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 2
+    version: int = 4
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
@@ -254,8 +348,21 @@ class ProtocolState(BaseModel):
     bicarbonate_doses: list[BicarbonateRecord] = Field(default_factory=list)
     stabilized_tablets: list[StabilizedTabletRecord] = Field(default_factory=list)
     cyanuric_acid_measurements: list[CyanuricAcidMeasurement] = Field(default_factory=list)
+    water_measurements: list[WaterMeasurement] = Field(default_factory=list)
     cumulative_additions: CumulativeAdditions = Field(default_factory=CumulativeAdditions)
     journal: list[JournalEvent] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def migrate_schema_version(self) -> ProtocolState:
+        """Marque une archive relue avec le schéma qui sera désormais écrit.
+
+        La conversion du contexte de traitement s'effectue dans
+        :class:`TreatmentContext`. Conserver un numéro ancien après une écriture
+        rendrait toutefois le JSON ambigu : une archive v3 pourrait alors
+        contenir le champ v4 ``disinfection_method``.
+        """
+        self.version = max(self.version, 4)
+        return self
 
     def add_event(self, event: str) -> None:
         """Ajoute un événement au journal et actualise la date de modification."""

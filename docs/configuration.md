@@ -15,6 +15,12 @@ Il est prévu pour modifier les réglages par défaut d'un nouveau protocole, pa
 | `protocol.tac_measurement_step_ppm` | ppm CaCO3 | Résolution du test TAC ; les valeurs saisies doivent être des multiples. |
 | `protocol.bucket_volume_l` | L | Taille nominale du seau. |
 | `protocol.naoh_concentration_g_l` | g/L | Concentration de la soude utilisée pour les conversions. |
+
+Les bornes de chlore libre ne sont pas des valeurs globales dans
+`defaults.json` : elles sont saisies à la création d'une archive de
+`surveillance_ph_haut`, car elles doivent venir de l'étiquette du désinfectant
+réel. Elles sont archivées dans `config.free_chlorine_min_ppm` et
+`config.free_chlorine_max_ppm`.
 | `workflow.naoh_large_gap_ph` | unité pH | Seuil entre la portion moyenne et la grande portion. |
 | `workflow.naoh_medium_gap_ph` | unité pH | Seuil entre la petite et la moyenne portion. |
 | `workflow.naoh_large_dose_ml` | mL | Repère de dose au-delà du seuil `naoh_large_gap_ph`. |

@@ -1,34 +1,51 @@
 # Objective
 
-Préserver le travail de reprise autour de la publication automatisée et de l'éventuelle prise en charge du carbonate de sodium (pH+).
+Faire évoluer `piscine-ph` pour suivre le cas opposé au protocole historique :
+pH au-dessus de la cible, TAC éventuellement différent de la cible et chlore
+libre trop bas ou trop haut, avec électrolyse, régulateur de pH et galets dans
+des états variables.
 
 # Current Status
 
-- `scripts/release.py` publie vers `origin/<branche-courante>` plutôt que vers `origin/main` ; cette correction est validée dans `8ae7333`.
-- La version `v0.1.1` a été publiée depuis `staging` (`8cb84de`) ; le HEAD courant est `a721f2d` et est en avance d'un commit sur `origin/staging` (`5b5bfd9`).
-- `main` contient cet état après la fusion de la PR n° 6 (`f0ce158`).
-- Une note technique de reprise sur le carbonate de sodium est dans `docs/evolution-carbonate-sodium.md`.
-- Le programme ne prend pas encore en charge le carbonate : il ne faut pas l'utiliser comme équivalent direct de NaOH + bicarbonate.
-- Les notes de reprise ont été commitées localement dans `a721f2d`, mais pas encore poussées sur `origin/staging`.
-- Une release `v0.1.2` est interrompue après la mise à jour de ses six fichiers. `scripts/release.py` contient localement le correctif `uv.lock`/`--resume` ; voir `handoff.md`.
+- Un parcours persistant `surveillance_ph_haut` a été ajouté, sans calcul de
+  dose d'acide, de chlore ou de bicarbonate.
+- Il archive pH, TAC et chlore libre via `record-water`, ainsi que les états de
+  l'électrolyse, du régulateur pH et des galets stabilisés.
+- Il émet des constats pour pH au-dessus de la cible/7,8, TAC différent de la
+  cible, chlore hors bornes déclarées, électrolyse arrêtée et galets consommés.
+- Une TUI Textual est désormais disponible via `piscine-ph tui` : menus par
+  onglets (tableau de bord, mesures, traitement, historique, aide), avec les
+  mêmes mutations de `ProtocolService` que la CLI.
+- Les modifications sont locales et non committées à ce stade.
 
 # Next Concrete Action
 
-Commiter séparément le correctif de `scripts/release.py` et de sa documentation, puis reprendre `v0.1.2` avec `--publish --resume`. Dans un chantier distinct, concevoir et tester un calcul carbonate avant toute option CLI.
+Relire le diff et la formulation des alertes, puis créer un commit dédié après
+la validation complète si le comportement convient.
 
 # Validation Snapshot
 
-Après la correction de ciblage de branche : `uv run ruff check scripts/release.py` et `uv run pytest` passent (20 tests).
+- `uv run ruff check .` : OK.
+- `uv run pytest` : 25 passés, dont deux tests Textual.
+- `uv build` et `git diff --check` : OK.
+- Parcours CLI vérifié dans un répertoire temporaire : création de la
+  surveillance, mesure pH 7,6 / TAC 70 / chlore libre 0,5, puis `status`.
 
 # Key Files
 
-- `scripts/release.py`
-- `docs/guide-developpeur.md`
-- `docs/evolution-carbonate-sodium.md`
-- `src/piscine_ph/chemistry.py`
+- `src/piscine_ph/models.py`
 - `src/piscine_ph/service.py`
+- `src/piscine_ph/cli.py`
+- `docs/surveillance-ph-haut-chlore.md`
+- `docs/guide-utilisateur.md`
+- `docs/guide-developpeur.md`
+- `tests/test_service.py`
 
 # Watchouts
 
-- Une release depuis `staging` doit pousser vers `origin/staging`, jamais automatiquement vers `origin/main`.
-- Le carbonate de sodium augmente pH et TAC simultanément ; les doses NaOH et bicarbonate ne sont pas convertibles par simple règle de trois.
+- Les bornes de chlore sont archivées à partir de l'étiquette du produit ; le
+  plancher de diagnostic passe à 2 ppm avec dichlore/trichlore stabilisé.
+- Ne jamais convertir une alerte en dose d'acide ou de chlore : concentration,
+  CYA, volume, appareil et notice sont indispensables.
+- Les archives et le protocole historique de hausse pH/TAC restent lisibles et
+  conservent leur comportement d'origine.

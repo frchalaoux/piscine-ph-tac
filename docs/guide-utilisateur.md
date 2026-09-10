@@ -26,7 +26,7 @@ Le projet demande Python 3.11 ou plus récent et l'outil `uv`. Même si Python n
 Ouvrir **Terminal**, puis exécuter une seule commande :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir le terminal. Démarrer ensuite l'application depuis n'importe quel dossier :
@@ -40,7 +40,7 @@ piscine-ph start
 Ouvrir **PowerShell**, puis exécuter une seule commande :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
@@ -58,7 +58,7 @@ piscine-ph start
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - L'application ne nécessite pas de dossier de projet local.
 
-L'installation est liée à la version `v0.1.2`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
+L'installation est liée à la version `v0.1.3`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
 
 ## Modifier les valeurs proposées par défaut
 
@@ -123,10 +123,10 @@ Dès la création, il affiche et archive un **approvisionnement indicatif** : st
 Si la cellule est arrêtée pour maintenance et que la désinfection temporaire est assurée par des galets stabilisés, déclarer ce contexte dès le début :
 
 ```bash
-piscine-ph start --electrolysis arretee --chlorine galets_stabilises
+piscine-ph start --electrolysis arretee --disinfection galets_stabilises
 ```
 
-Si le protocole existe déjà, utiliser à la place `piscine-ph treatment --electrolysis arretee --chlorine galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
+Si le protocole existe déjà, utiliser à la place `piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises`. L'estimation d'approvisionnement est alors actualisée et stockée à nouveau avec la marge spécifique aux galets stabilisés.
 
 Le calcul théorique du TAC reste disponible, mais la prévision de pH devient indicative car les galets acidifient l'eau et apportent du CYA. Journaliser les galets et chaque mesure de stabilisant :
 
@@ -280,6 +280,99 @@ Une alerte est un signal de contrôle : ne pas l'ignorer et ne pas ajouter une f
 
 Si l'application indique que la prédiction de pH est indisponible, le couple pH/TAC de départ est hors du domaine utile du modèle carbonate fermé. Dans ce cas, ne pas utiliser un pH attendu théorique : utiliser la variation de pH réellement mesurée après chaque dose pour choisir la dose suivante.
 
+## Cas distinct : pH haut et chlore à surveiller
+
+Quand le pH est déjà au-dessus de la cible, ne démarrez pas le protocole de
+soude/bicarbonate : il sert uniquement à remonter un pH bas. Créez plutôt une
+archive de surveillance ; elle journalise le pH, le TAC, le chlore libre et
+l'état des équipements sans calculer de dose d'acide ou de chlore :
+
+```bash
+piscine-ph start --no-guided --force \
+  --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 \
+  --chlorine-min 1 --chlorine-max 4 \
+  --electrolysis arretee --ph-regulator arrete \
+  --disinfection galets_stabilises --tablets consommes
+piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
+```
+
+Les bornes de chlore doivent être celles de l'étiquette du désinfectant. Le
+programme alerte si le chlore est sous ou au-dessus de ces bornes, mais ne
+propose jamais une dose. Il signale aussi les galets consommés, l'électrolyse ou
+le régulateur de pH arrêté. Le [guide de surveillance](surveillance-ph-haut-chlore.md)
+explique le parcours, les limites et les précautions.
+
+## Interface à menus
+
+La commande suivante lance une interface Textual destinée à la consultation et
+aux opérations courantes :
+
+```bash
+piscine-ph tui
+```
+
+La barre de menus en haut donne accès à **Accueil**, **Protocole**,
+**Mesures**, **Traitement**, **Archives** et **Aide**. L'item actif est mis en
+évidence et chaque page défile indépendamment. Les actions d'une page sont
+regroupées dans des items dépliables : aucun champ prérempli n'est affiché sans
+son libellé. `⌘R` sur macOS (`Ctrl+R` sur les autres systèmes) actualise
+l'affichage, et `q` quitte l'application ; `⌘↓` et `⌘↑` sur macOS (`Ctrl+↓` et
+`Ctrl+↑` sur les autres systèmes) font défiler la page
+active. Le menu **Protocole** couvre `start`, `configure-naoh`, `dose`,
+`plan-tac`, les annulations et la correction de mesure. Le menu **Mesures** enregistre les
+mesures attendues par le protocole actif : après une dose de soude ou de
+bicarbonate dans un parcours pH bas, il demande pH et TAC ; pour la
+surveillance pH haut, il demande aussi le chlore libre. L'onglet
+**Traitement** ne pilote aucun appareil : il distingue la **désinfection
+active** (une seule source) de l'état de l'électrolyseur au sel, du doseur de
+galets stabilisés et du régulateur pH.
+
+Le bouton **Arrêter le protocole…** du tableau de bord ouvre une confirmation.
+Après validation, le protocole est marqué `annule` et reste dans l'historique ;
+les éventuelles préparations non confirmées sont retirées, comme avec
+`piscine-ph cancel-protocol`.
+
+Le bouton **Voir le JSON actif** ouvre le fichier du protocole en lecture seule.
+Dans **Archives**, choisir une archive puis **Voir le JSON sélectionné**. Le
+contenu et son chemin sont sélectionnables pour être copiés, sans possibilité de
+modifier les données depuis le TUI.
+
+L'onglet **Commandes CLI** liste la correspondance de chaque commande Typer :
+aucune règle métier n'est dupliquée, les deux interfaces enregistrent les mêmes
+archives et appliquent les mêmes contrôles. Les commandes Typer restent utiles
+pour les scripts et l'automatisation.
+
+### Installation publiée ou version locale
+
+La commande globale `piscine-ph` exécute la version installée depuis un tag de
+release. Elle ne connaît donc pas une commande ajoutée seulement dans le dépôt
+de développement. Si `piscine-ph tui` répond `No such command 'tui'`, la
+version installée est antérieure à l'ajout de la TUI.
+
+Pour essayer la version locale du projet sans modifier l'installation globale :
+
+```bash
+cd /Users/frchalaoux/Documents/Developpement/rectificationph
+uv run piscine-ph tui
+```
+
+Pour installer une seule fois la version locale en mode développement et lancer
+ensuite `piscine-ph` directement après chaque modification Python :
+
+```bash
+cd /Users/frchalaoux/Documents/Developpement/rectificationph
+uv tool install --editable --reinstall .
+piscine-ph tui
+```
+
+`--editable` fait pointer l'outil global vers le dépôt ; `--reinstall` remplace
+une éventuelle installation publiée existante. Les changements de code sont
+ensuite visibles sans réinstallation. Refaire l'installation seulement après
+une modification de dépendance, de `pyproject.toml` ou de l'entrée de commande :
+`uv tool install --editable --reinstall .`. Pour revenir à une version publiée,
+relancer la commande d'installation associée au tag voulu sur la page des
+releases.
+
 ## Voir les protocoles précédents
 
 ```bash
@@ -287,6 +380,17 @@ piscine-ph history
 ```
 
 Les fichiers JSON de suivi restent dans `data/protocoles/`. Ils ne sont pas ajoutés à Git.
+Pour consulter et copier le JSON du protocole actif, sans le modifier :
+
+```bash
+piscine-ph json
+```
+
+Pour consulter une archive précise, utiliser son nom affiché par `history` :
+
+```bash
+piscine-ph json protocole_20260910_102222.json
+```
 
 ## Aide
 
