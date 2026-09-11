@@ -43,11 +43,17 @@ Ne modifier, n'indexer ni ne committer aucun des fichiers de version à la main.
 git status --short
 git switch staging
 git pull --ff-only origin staging
-uv run python scripts/release.py 0.1.2
-uv run python scripts/release.py 0.1.2 --publish
+uv run python scripts/release.py X.Y.Z
+# Exécuter seulement après la demande explicite et actuelle de l'utilisateur.
+uv run python scripts/release.py X.Y.Z --publish
 ```
 
-La première commande Python est une simulation : elle ne modifie aucun fichier. La seconde exécute, dans cet ordre, les contrôles, la mise à jour des fichiers, la construction, le commit `release: preparer la version 0.1.2`, le push vers `origin/staging`, le tag annoté `v0.1.2`, son push, puis la release GitHub. C'est le parcours à privilégier.
+La première commande Python est une simulation : elle ne modifie aucun fichier.
+La seconde exécute, dans cet ordre, les contrôles, la mise à jour des fichiers,
+la construction, le commit `release: preparer la version X.Y.Z`, le push vers
+`origin/staging`, le tag annoté `vX.Y.Z`, son push, puis la release GitHub.
+Elle modifie l'état distant : ne jamais l'exécuter sans une demande explicite,
+distincte et actuelle de l'utilisateur.
 
 ### Fichiers inclus et journal attendu
 
@@ -75,21 +81,25 @@ Vérifier d'abord que l'arbre est propre, que le commit courant contient bien la
 ```bash
 git status --short
 git log -1 --oneline
-git ls-remote --tags origin v0.1.2
+git ls-remote --tags origin vX.Y.Z
 ```
 
 Si la première commande ne produit rien et que la dernière ne produit aucune ligne, reprendre ainsi :
 
 ```bash
-uv run python scripts/release.py 0.1.2 --publish --resume
+uv run python scripts/release.py X.Y.Z --publish --resume
 ```
 
-`--resume` exige que `pyproject.toml` porte déjà `0.1.2`. Il relance les contrôles et distingue deux situations :
+`--resume` exige que `pyproject.toml` porte déjà `X.Y.Z`. Il relance les
+contrôles et distingue deux situations :
 
 - les six fichiers sont encore modifiés : il les indexe et crée le commit de release ;
 - ils sont déjà committés : il ne crée pas de deuxième commit et reprend depuis `HEAD`.
 
-Dans les deux cas, il pousse `HEAD` vers la branche distante active (même s'il est déjà à jour), crée et pousse `v0.1.2`, puis publie la release GitHub. Il refuse tout fichier modifié hors de la liste de release.
+Dans les deux cas, il pousse `HEAD` vers la branche distante active (même s'il
+est déjà à jour), crée et pousse `vX.Y.Z`, puis publie la release GitHub. Il
+refuse tout fichier modifié hors de la liste de release. Cette reprise reste
+soumise à la même demande explicite de publication.
 
 ## Évolutions en attente
 

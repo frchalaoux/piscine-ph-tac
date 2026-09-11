@@ -1,6 +1,6 @@
 # Handoff — `piscine-ph`
 
-Date de préparation : 9 septembre 2026
+Date de mise à jour : 11 septembre 2026
 
 ## Objectif du projet
 
@@ -15,43 +15,35 @@ Le dépôt public est [frchalaoux/piscine-ph-tac](https://github.com/frchalaoux/
 ## État Git à reprendre
 
 - Branche locale active : `staging`.
-- `staging` pointe sur `a721f2d` (`docs: ajouter le handoff et la piste carbonate`) et est en avance d'un commit sur `origin/staging`, qui pointe sur `5b5bfd9` (`version adjustement`).
-- `main` locale et `origin/main` pointent sur `f0ce158`, merge de la PR n° 6 depuis `staging` ; `main` contient donc l'état publié de `staging` à ce moment.
-- Tags/releases publiés : `v0.1.0` et `v0.1.1`.
-- La release actuelle est [v0.1.1](https://github.com/frchalaoux/piscine-ph-tac/releases/tag/v0.1.1).
-
-### Release `v0.1.2` interrompue
-
-Une première tentative de `uv run python scripts/release.py 0.1.2 --publish` a mis à jour les six fichiers de release, puis s'est arrêtée après `git diff --check`, avant le `git add` et le commit. Aucun tag `v0.1.2` ni release n'a été créé.
-
-Les six modifications attendues restent locales :
-
-- `pyproject.toml` ;
-- `uv.lock` ;
-- `install.sh` et `install.ps1` ;
-- `README.md` et `docs/guide-utilisateur.md`.
-
-`scripts/release.py` et `docs/guide-developpeur.md` contiennent aussi une correction locale : le script indexe désormais `uv.lock`, contrôle l'index et propose `--resume`. Commiter ce correctif séparément avant de reprendre la release, sans ajouter les six fichiers de release, puis lancer :
-
-```bash
-uv run python scripts/release.py 0.1.2 --publish --resume
-```
+- `staging` et `origin/staging` pointent sur `66d6c26`, tagué `v0.2.3`.
+- `test-cli-windows` et `origin/test-cli-windows` pointent sur `866a01a`
+  (« ajouter le parcours CLI pH bas et galets »). Ce commit a été intégré à
+  `staging` par avance rapide le 10 septembre 2026, avant la préparation de
+  `v0.2.3`.
+- `main` et `origin/main` pointent sur `663f9d4` (PR n° 8) et ne contiennent
+  pas encore `866a01a` ni `v0.2.3`.
+- Les tags/releases publiés vont de `v0.1.0` à `v0.2.3`. La release de travail
+  la plus récente est [v0.2.3](https://github.com/frchalaoux/piscine-ph-tac/releases/tag/v0.2.3).
 
 ## Installation utilisateur
 
 L'installation est versionnée et ne dépend pas de `main` :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.1/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.3/install.sh | sh
 ```
 
 Sous PowerShell :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.3/install.ps1 | iex
 ```
 
-Les scripts installent `uv` seulement s'il est absent du `PATH`, puis installent le paquet depuis le tag. Ils ne réinstallent pas `uv` ou Python lorsqu'une installation compatible existe ; `uv` peut télécharger un Python compatible si nécessaire. Après une première installation de `uv`, l'utilisateur peut devoir rouvrir son terminal avant d'exécuter `piscine-ph start`.
+Les scripts installent `uv` seulement s'il est absent du `PATH`, puis installent
+le paquet depuis le tag. Ils installent ensuite Python 3.11 afin de ne pas
+réutiliser un Python 3.10 incompatible avec la version d'`uv` utilisée. Après
+une première installation de `uv`, l'utilisateur peut devoir rouvrir son
+terminal avant d'exécuter `piscine-ph start`.
 
 ## Publication de versions
 
@@ -59,10 +51,10 @@ Le programme `scripts/release.py` automatise une release depuis **la branche loc
 
 ```bash
 # Simulation, sans modifier de fichier
-uv run python scripts/release.py 0.1.2
+uv run python scripts/release.py X.Y.Z
 
-# Publication complète
-uv run python scripts/release.py 0.1.2 --publish
+# Publication complète — seulement après demande explicite de l'utilisateur
+uv run python scripts/release.py X.Y.Z --publish
 ```
 
 Avec `--publish`, le programme :
@@ -75,7 +67,7 @@ Avec `--publish`, le programme :
 6. pousse `HEAD` vers `origin/<branche-active>` ;
 7. crée/pousse le tag `vX.Y.Z` et publie la release GitHub.
 
-Point crucial : lancé depuis `staging`, il fait `git push origin HEAD:staging` et **ne touche pas `origin/main`**. La mise à jour de `main` doit continuer à passer par une pull request puis une fusion GitHub, conformément au workflow souhaité.
+Point crucial : lancé depuis `staging`, il fait `git push origin HEAD:staging` et **ne touche pas `origin/main`**. La mise à jour de `main` doit continuer à passer par une pull request puis une fusion GitHub, conformément au workflow souhaité. La commande `--publish` crée des modifications distantes ; ne jamais l'exécuter sans demande explicite, distincte et actuelle de l'utilisateur.
 
 ## Déclaration de concentration NaOH
 
@@ -105,10 +97,15 @@ uv build
 git diff --check
 ```
 
-La dernière validation fonctionnelle enregistrée a donné : Ruff OK et 20 tests Pytest passants. Relancer les commandes ci-dessus avant tout commit qui modifie le code ou les scripts de publication.
+Le 11 septembre 2026, `uv run ruff check .` est vert et `uv run pytest -q`
+réussit avec 53 tests. Relancer les commandes ci-dessus avant tout commit qui
+modifie le code ou les scripts de publication.
 
 ## Prochaine action recommandée
 
-1. Commiter/pousser le correctif de `scripts/release.py` et de la documentation développeur, en laissant les six fichiers de `v0.1.2` non indexés.
-2. Reprendre `v0.1.2` avec `--publish --resume` ; vérifier le journal jusqu'à `gh release create`.
-3. Ne commencer l'implémentation du carbonate que dans un chantier distinct, avec des mesures/attentes chimiques explicites et des tests dédiés.
+1. Recueillir le retour d'installation Windows de `v0.2.3`, qui contient le
+   parcours auparavant porté par `test-cli-windows`.
+2. Intégrer `staging` dans `main` via une pull request lorsque le périmètre est
+   validé ; ne pas effectuer cette opération distante sans instruction.
+3. Ne commencer l'implémentation du carbonate que dans un chantier distinct,
+   avec des mesures/attentes chimiques explicites et des tests dédiés.
