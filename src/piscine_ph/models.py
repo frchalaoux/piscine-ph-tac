@@ -22,6 +22,7 @@ class ProtocolStep(StrEnum):
     PH_TO_INTERMEDIATE = "naoh_vers_palier"
     TAC_TO_TARGET = "tac_vers_80"
     PH_TO_TARGET = "naoh_final"
+    ACID_TO_TARGET = "acide_vers_cible"
     HIGH_PH_MONITORING = "surveillance_ph_haut"
     COMPLETE = "termine"
     CANCELLED = "annule"
@@ -30,7 +31,13 @@ class ProtocolStep(StrEnum):
 class ProtocolMode(StrEnum):
     """Parcours disponibles dans une archive de suivi."""
 
+    # Le nom historique est conservé afin que les archives 0.1.3 restent
+    # parfaitement lisibles. C'est le parcours « correction pH » avec sa
+    # conséquence normale sur le TAC.
     RAISE_PH_TAC = "correction_hausse_ph_tac"
+    RAISE_TAC = "correction_hausse_tac"
+    LOWER_PH_MONITORING = "correction_baisse_ph"
+    DISINFECTION_MONITORING = "surveillance_desinfectant"
     HIGH_PH_MONITORING = "surveillance_ph_haut"
 
 
@@ -58,6 +65,18 @@ class StabilizedTabletStatus(StrEnum):
     CONSUMED = "consommes"
     PAUSED = "suspendus"
     NOT_NEEDED = "non_necessaires"
+
+
+class StabilizedTabletProduct(StrEnum):
+    """Profil facultatif du produit de galets réellement déclaré.
+
+    Le profil ne remplace jamais l'étiquette. Il sert à afficher les
+    incompatibilités documentées pour le produit précis fourni par l'utilisateur.
+    """
+
+    UNKNOWN = "inconnu"
+    TRICHLOR_MULTIFUNCTION_GCCHL4EC = "trichlore_multifonctions_gcchl4ec"
+    TRICHLOR_SLOW_GCCHLLEC = "trichlore_lent_gcchllec"
 
 
 class ChlorineTreatment(StrEnum):
@@ -99,6 +118,7 @@ class TreatmentContext(BaseModel):
     disinfection_method: DisinfectionMethod = DisinfectionMethod.UNKNOWN
     ph_regulator_status: PhRegulatorStatus = PhRegulatorStatus.UNKNOWN
     stabilized_tablet_status: StabilizedTabletStatus = StabilizedTabletStatus.UNKNOWN
+    stabilized_tablet_product: StabilizedTabletProduct = StabilizedTabletProduct.UNKNOWN
 
     @model_validator(mode="before")
     @classmethod
@@ -126,6 +146,16 @@ class TreatmentContext(BaseModel):
             return values
         values["disinfection_method"] = legacy_value
         return values
+
+    @model_validator(mode="after")
+    def validate_tablet_product(self) -> TreatmentContext:
+        """Empêche d'associer un profil de galets à une autre désinfection."""
+        if (
+            self.stabilized_tablet_product is not StabilizedTabletProduct.UNKNOWN
+            and self.disinfection_method is not DisinfectionMethod.STABILIZED_TABLETS
+        ):
+            raise ValueError("Un profil de galets exige la desinfection galets_stabilises.")
+        return self
 
     @property
     def uses_stabilized_chlorine(self) -> bool:
@@ -157,7 +187,7 @@ class WaterMeasurement(BaseModel):
 
     ph: float = Field(gt=0, lt=14)
     tac_ppm: float = Field(gt=0)
-    free_chlorine_ppm: float = Field(ge=0)
+    free_chlorine_ppm: float | None = Field(default=None, ge=0)
     recorded_at: datetime = Field(default_factory=datetime.now)
 
 
@@ -204,9 +234,16 @@ class ProtocolConfig(BaseModel):
         if self.mode is ProtocolMode.RAISE_PH_TAC:
             if not self.initial_ph < self.intermediate_ph < self.target_ph:
                 raise ValueError("Les pH doivent respecter : initial < palier < cible.")
-        elif self.initial_ph <= self.target_ph:
+        elif self.mode is ProtocolMode.RAISE_TAC:
+            if self.initial_tac_ppm >= self.target_tac_ppm:
+                raise ValueError(
+                    "En correction TAC, le TAC initial doit etre strictement inferieur a la cible."
+                )
+        elif self.mode in {ProtocolMode.LOWER_PH_MONITORING, ProtocolMode.HIGH_PH_MONITORING} and (
+            self.initial_ph <= self.target_ph
+        ):
             raise ValueError(
-                "En surveillance pH haut, le pH initial doit etre strictement superieur a la cible."
+                "En correction ou surveillance pH haut, le pH initial doit etre strictement superieur a la cible."
             )
         if self.free_chlorine_min_ppm > self.free_chlorine_max_ppm:
             raise ValueError(
@@ -278,6 +315,27 @@ class NaOHDoseRecord(BaseModel):
     recorded_at: datetime = Field(default_factory=datetime.now)
 
 
+class PendingAcidDose(BaseModel):
+    """Lot d'acide sulfurique 15 % proposé par l'étiquette, avant re-mesure."""
+
+    ph_before: float
+    tac_before_ppm: float
+    acid_ml: float = Field(gt=0)
+    target_ph_for_batch: float = Field(gt=0, lt=14)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class AcidDoseRecord(BaseModel):
+    """Lot d'acide confirmé uniquement après mesure bassin."""
+
+    ph_before: float
+    tac_before_ppm: float
+    acid_ml: float
+    ph_after: float
+    tac_after_ppm: float
+    recorded_at: datetime = Field(default_factory=datetime.now)
+
+
 class PendingBicarbonatePlan(BaseModel):
     """Lot de bicarbonate calculé, en attente de sa mesure de confirmation."""
 
@@ -315,6 +373,7 @@ class CumulativeAdditions(BaseModel):
 
     naoh_solution_ml: float = 0.0
     naoh_moles: float = 0.0
+    sulfuric_acid_15_ml: float = 0.0
     bicarbonate_kg: float = 0.0
     bicarbonate_moles: float = 0.0
     theoretical_tac_from_naoh_ppm: float = 0.0
@@ -330,7 +389,7 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 4
+    version: int = 6
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
@@ -343,8 +402,10 @@ class ProtocolState(BaseModel):
     current_tac_ppm: float
     initial_coherence: CoherenceCheck | None = None
     pending_naoh: PendingNaOHDose | None = None
+    pending_acid: PendingAcidDose | None = None
     pending_bicarbonate: PendingBicarbonatePlan | None = None
     naoh_doses: list[NaOHDoseRecord] = Field(default_factory=list)
+    acid_doses: list[AcidDoseRecord] = Field(default_factory=list)
     bicarbonate_doses: list[BicarbonateRecord] = Field(default_factory=list)
     stabilized_tablets: list[StabilizedTabletRecord] = Field(default_factory=list)
     cyanuric_acid_measurements: list[CyanuricAcidMeasurement] = Field(default_factory=list)
@@ -358,10 +419,10 @@ class ProtocolState(BaseModel):
 
         La conversion du contexte de traitement s'effectue dans
         :class:`TreatmentContext`. Conserver un numéro ancien après une écriture
-        rendrait toutefois le JSON ambigu : une archive v3 pourrait alors
-        contenir le champ v4 ``disinfection_method``.
+        rendrait toutefois le JSON ambigu : une archive v4 pourrait alors
+        contenir les lots d'acide sulfurique introduits en v6.
         """
-        self.version = max(self.version, 4)
+        self.version = max(self.version, 6)
         return self
 
     def add_event(self, event: str) -> None:

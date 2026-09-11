@@ -1,19 +1,19 @@
 # piscine-ph
 
-Outil en ligne de commande pour suivre une correction progressive du pH et du TAC d'une piscine.
+Outil en ligne de commande pour suivre une correction progressive du pH, du TAC et du désinfectant d'une piscine.
 
 ## Installation et lancement
 
 Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'application :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.sh | sh
 ```
 
-Sous Windows, ouvrir PowerShell et exécuter :
+Sous Windows 10 ou 11, ouvrir Windows PowerShell et exécuter (Git n'est pas nécessaire) :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.ps1 | iex
 ```
 
 Ensuite, depuis n'importe quel dossier (rouvrir le terminal après une première installation de `uv`) :
@@ -32,13 +32,18 @@ La structure et la lecture des paramètres et archives sont détaillées dans la
 Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
 Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
 Le cas « pH haut, TAC à confirmer et chlore faible ou fort » est décrit dans le [guide de surveillance](docs/surveillance-ph-haut-chlore.md).
+Les profils des produits déclarés, les FDS associées et les limites de sécurité sont réunis dans le [guide produits et sécurité](docs/produits-et-securite.md).
 
 ## Commandes principales
 
 ```bash
 piscine-ph start
+piscine-ph protocols
 piscine-ph dose
+piscine-ph dose-acid
+piscine-ph measure-acid --ph 7.4 --tac 80
 piscine-ph cancel-dose
+piscine-ph cancel-acid-dose
 piscine-ph cancel-tac-plan
 piscine-ph correct-last-measurement --ph 4.5 --tac 50
 piscine-ph cancel-protocol
@@ -47,10 +52,14 @@ piscine-ph plan-tac --tac 50
 piscine-ph measure-tac --ph 6.1 --tac 80
 piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises
 piscine-ph record-tablets --count 2 --unit-mass-g 200
+piscine-ph plan-tablets
 piscine-ph measure-cya --cya 35
 piscine-ph tui
 piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4
 piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
+piscine-ph start --no-guided --force --mode correction_hausse_tac --initial-tac 60 --target-tac 80
+piscine-ph start --no-guided --force --mode correction_baisse_ph --initial-ph 7.6 --target-ph 7.2
+piscine-ph start --no-guided --force --mode surveillance_desinfectant --disinfection galets_stabilises --tablet-product trichlore_lent_gcchllec
 piscine-ph history
 piscine-ph json
 ```
@@ -58,6 +67,11 @@ piscine-ph json
 `piscine-ph start` reprend automatiquement le dernier protocole non terminé.
 Utiliser `--force` uniquement pour créer une nouvelle archive malgré un protocole actif.
 
+Pour une baisse de pH avec l'IRRIPOOL PH- LIQUIDE 15 %, le programme prépare
+un seul lot plafonné à 0,1 unité de pH, à confirmer par une mesure pH/TAC avant
+tout autre lot. Pour les galets, `plan-tablets` est une proposition issue de
+l'étiquette, jamais un ajout enregistré automatiquement.
+
 ## Mises à jour
 
-L'installation est figée sur la version `v0.1.3`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.
+L'installation est figée sur la version `v0.2.4`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.

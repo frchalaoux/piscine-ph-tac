@@ -12,10 +12,13 @@ Préparer :
 - un test TAC ;
 - la soude liquide indiquée à 300 g/L ;
 - du bicarbonate de sodium ;
+- l'acide sulfurique 15 % déclaré, seulement si le pH doit être abaissé ;
 - un seau compatible avec les produits, de 10 L par défaut ;
 - les protections indiquées sur la fiche de données de sécurité du produit.
 
 Ne pas utiliser la piscine pendant la correction. La soude est corrosive : ajouter la soude lentement dans l'eau, jamais l'eau dans la soude.
+Ne jamais mélanger l'acide sulfurique avec des galets au trichlore, ni les placer
+dans le même récipient ou doseur.
 
 ## Installer l'application
 
@@ -26,7 +29,7 @@ Le projet demande Python 3.11 ou plus récent et l'outil `uv`. Même si Python n
 Ouvrir **Terminal**, puis exécuter une seule commande :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.sh | sh
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir le terminal. Démarrer ensuite l'application depuis n'importe quel dossier :
@@ -40,10 +43,10 @@ piscine-ph start
 Ouvrir **PowerShell**, puis exécuter une seule commande :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.1.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.ps1 | iex
 ```
 
-Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
+Elle installe `uv`, puis Python 3.11 même si un Python plus ancien est déjà présent, et enfin `piscine-ph`. Windows 10 et 11 incluent déjà Windows PowerShell ; Git n'est pas nécessaire, car l'application est téléchargée depuis l'archive de la version publiée. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
 
 ```powershell
 piscine-ph start
@@ -54,11 +57,13 @@ piscine-ph start
 - `uv : commande introuvable` : relancer la commande d'installation ci-dessus. Elle installe `uv` pour le compte utilisateur.
 - `piscine-ph : commande introuvable` : fermer totalement le terminal, l'ouvrir à nouveau, puis réessayer. L'installateur ajoute normalement le répertoire des outils au `PATH`.
 - `Python introuvable` : relancer la commande d'installation ; `uv` téléchargera une version compatible.
+- `PowerShell introuvable` : sur Windows 10/11, rechercher **Windows PowerShell** dans le menu Démarrer. Sur une installation Windows inhabituelle où il serait absent, l'installer d'abord depuis Microsoft ou demander l'aide de l'administrateur : le script ne peut pas installer le terminal qui l'exécute.
+- `git : commande introuvable` : aucun problème ; Git n'est pas requis pour installer ou utiliser l'application.
 - Erreur de réseau : reconnecter l'ordinateur puis relancer la même commande ; `uv` reprendra les téléchargements nécessaires.
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - L'application ne nécessite pas de dossier de projet local.
 
-L'installation est liée à la version `v0.1.3`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
+L'installation est liée à la version `v0.2.4`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
 
 ## Modifier les valeurs proposées par défaut
 
@@ -168,6 +173,46 @@ piscine-ph menu
 ```
 
 Le menu affiche l'étape active et propose seulement l'action logique suivante. Il s'arrête lorsqu'une action physique doit être réalisée : ajout de soude ou bicarbonate, circulation, puis mesure dans le bassin. Relancer `menu` après la mesure pour continuer.
+
+## Correction de pH vers le bas — acide sulfurique 15 %
+
+Choisir le protocole **Correction pH**, puis **Baisse pH**, et déclarer le pH,
+le TAC et le volume mesurés. Avant d'utiliser l'acide, arrêter ou isoler un
+régulateur pH en marche et suspendre les galets stabilisés encore actifs.
+
+```bash
+piscine-ph dose-acid
+```
+
+Pour le produit `IRRIPOOL PH- LIQUIDE 15 %`, la commande applique le ratio de
+la notice : 75 mL pour 10 m³ et une baisse de 0,1 pH. Elle limite donc chaque
+lot à 0,1 pH, même si l'écart à la cible est supérieur. Mettre la filtration en
+marche, répartir l'acide comme l'indique l'étiquette, attendre l'homogénéisation
+puis mesurer à nouveau dans le bassin :
+
+```bash
+piscine-ph measure-acid --ph 7.40 --tac 80
+```
+
+Si le pH est encore trop haut, l'application propose un seul nouveau lot. Si la
+cible est atteinte, elle indique explicitement de ne rien ajouter. Un lot
+préparé mais non versé peut seul être annulé avec `piscine-ph cancel-acid-dose`.
+
+## Désinfectant — galets stabilisés
+
+Le protocole désinfectant demande une mesure de chlore libre. Si elle est sous
+la plage déclarée, et si le CYA mesuré est inférieur à 50 ppm, `plan-tablets`
+peut proposer une charge initiale :
+
+```bash
+piscine-ph plan-tablets
+```
+
+Le profil `GCCHLLEC` utilise 1 galet pour 25 m³ comme repère de la notice ;
+pour les autres produits, fournir la valeur de l'emballage, par exemple
+`piscine-ph plan-tablets --m3-per-tablet 20`. Vérifier l'étiquette présente au
+bord du bassin : elle prévaut toujours. Enregistrer ensuite uniquement les
+galets effectivement posés avec `record-tablets`.
 
 ## Étape 1 — Remonter jusqu'à pH 6
 

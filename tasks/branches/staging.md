@@ -1,51 +1,52 @@
 # Objective
 
-Faire évoluer `piscine-ph` pour suivre le cas opposé au protocole historique :
-pH au-dessus de la cible, TAC éventuellement différent de la cible et chlore
-libre trop bas ou trop haut, avec électrolyse, régulateur de pH et galets dans
-des états variables.
+Faire évoluer `piscine-ph` vers des protocoles CLI distincts pour le pH, le
+TAC et le désinfectant, sans transformer les FDS en consignes de dosage.
 
 # Current Status
 
-- Un parcours persistant `surveillance_ph_haut` a été ajouté, sans calcul de
-  dose d'acide, de chlore ou de bicarbonate.
-- Il archive pH, TAC et chlore libre via `record-water`, ainsi que les états de
-  l'électrolyse, du régulateur pH et des galets stabilisés.
-- Il émet des constats pour pH au-dessus de la cible/7,8, TAC différent de la
-  cible, chlore hors bornes déclarées, électrolyse arrêtée et galets consommés.
-- Une TUI Textual est désormais disponible via `piscine-ph tui` : menus par
-  onglets (tableau de bord, mesures, traitement, historique, aide), avec les
-  mêmes mutations de `ProtocolService` que la CLI.
-- Les modifications sont locales et non committées à ce stade.
+- Les modes `correction_hausse_tac`, `correction_baisse_ph` et
+  `surveillance_desinfectant` complètent le parcours historique et restent
+  persistés dans le JSON v6.
+- Les galets au trichlore `GCCHL4EC` et `GCCHLLEC` sont des profils séparés.
+  L'application conserve l'incompatibilité avec l'acide sulfurique et ne
+  calcule jamais de quantité d'acide ou de galets sans notice de dosage.
+- L'installateur Windows force désormais Python 3.11 afin de ne pas réutiliser
+  un Python 3.10 incompatible.
+- La branche `test-cli-windows` a été intégrée à `staging` par avance rapide au
+  commit `866a01a` le 10 septembre 2026.
+- Les releases `v0.2.0` à `v0.2.3` ont été publiées. La version `v0.2.3`,
+  disponible sur `staging` et `origin/staging`, contient le parcours CLI pH bas
+  et galets issu de `test-cli-windows`.
 
 # Next Concrete Action
 
-Relire le diff et la formulation des alertes, puis créer un commit dédié après
-la validation complète si le comportement convient.
+Recueillir le retour d'installation Windows de `v0.2.3`. Corriger localement,
+tester et montrer le résultat à l'utilisateur ; ne publier qu'après son accord
+explicite.
 
 # Validation Snapshot
 
-- `uv run ruff check .` : OK.
-- `uv run pytest` : 25 passés, dont deux tests Textual.
-- `uv build` et `git diff --check` : OK.
-- Parcours CLI vérifié dans un répertoire temporaire : création de la
-  surveillance, mesure pH 7,6 / TAC 70 / chlore libre 0,5, puis `status`.
+- Le 11 septembre 2026 : `uv run ruff check .` est vert et
+  `uv run pytest -q` réussit avec 53 tests.
+- `sh -n install.sh` est valide.
 
 # Key Files
 
+- `install.ps1`, `install.sh`
+- `src/piscine_ph/cli.py`
 - `src/piscine_ph/models.py`
 - `src/piscine_ph/service.py`
-- `src/piscine_ph/cli.py`
-- `docs/surveillance-ph-haut-chlore.md`
-- `docs/guide-utilisateur.md`
-- `docs/guide-developpeur.md`
-- `tests/test_service.py`
+- `docs/produits-et-securite.md`
+- `docs/fichiers-json.md`
 
 # Watchouts
 
-- Les bornes de chlore sont archivées à partir de l'étiquette du produit ; le
-  plancher de diagnostic passe à 2 ppm avec dichlore/trichlore stabilisé.
-- Ne jamais convertir une alerte en dose d'acide ou de chlore : concentration,
-  CYA, volume, appareil et notice sont indispensables.
-- Les archives et le protocole historique de hausse pH/TAC restent lisibles et
-  conservent leur comportement d'origine.
+- **Directive utilisateur prioritaire — « keep cool » : ne jamais créer,
+  déplacer ou publier un tag, une release ou une mise à jour distante sans une
+  demande explicite et distincte de l'utilisateur.** Préparer et tester est
+  autorisé ; s'arrêter avant toute publication et demander confirmation.
+- Ne pas supprimer les tags `v0.2.0`, `v0.2.1` ou `v0.2.2` : l'utilisateur a
+  explicitement demandé de les conserver.
+- Ne jamais proposer de mélange entre l'acide sulfurique et les galets au
+  trichlore. Une FDS renseigne la sécurité, pas une posologie.

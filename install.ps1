@@ -1,8 +1,9 @@
 # Installe piscine-ph pour le compte courant (Windows PowerShell).
+# Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 $ErrorActionPreference = "Stop"
 
-$releaseVersion = "v0.1.3"
-$repositoryUrl = "git+https://github.com/frchalaoux/piscine-ph-tac.git@$releaseVersion"
+$releaseVersion = "v0.2.4"
+$sourceUrl = "https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/$releaseVersion.tar.gz"
 
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     $uvCommand = "uv"
@@ -17,9 +18,15 @@ else {
     $uvCommand = $uvPath
 }
 
-& $uvCommand tool install --reinstall $repositoryUrl
+Write-Host "Installation de Python 3.11..."
+& $uvCommand python install 3.11
 if ($LASTEXITCODE -ne 0) {
-    exit $LASTEXITCODE
+    throw "L'installation de Python 3.11 a échoué (code $LASTEXITCODE)."
+}
+
+& $uvCommand tool install --python 3.11 --reinstall $sourceUrl
+if ($LASTEXITCODE -ne 0) {
+    throw "L'installation de piscine-ph a échoué (code $LASTEXITCODE)."
 }
 
 Write-Host ""
