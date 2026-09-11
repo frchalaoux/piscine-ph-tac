@@ -3,7 +3,7 @@
 # Ni Git ni un clone local ne sont nécessaires : uv construit l'archive du tag publié.
 set -eu
 
-release_version="v0.2.3"
+release_version="v0.2.4"
 source_url="https://github.com/frchalaoux/piscine-ph-tac/archive/refs/tags/${release_version}.tar.gz"
 
 if command -v uv >/dev/null 2>&1; then
