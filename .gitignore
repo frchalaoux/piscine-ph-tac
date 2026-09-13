@@ -7,3 +7,4 @@ data/protocoles/
 .venv/
 *.tmp
 dist/
+AGENTS.md

@@ -46,3 +46,21 @@ Sources de prix et dosage : [pH+ Aquablue](https://www.castorama.fr/granules-ph-
 5. Ajouter des tests de régression sur les cas « pH bas/TAC correct », « pH correct/TAC bas » et « pH bas/TAC bas » avant de présenter le carbonate comme une alternative.
 
 Jusqu'à cette implémentation, conserver le protocole actuel : NaOH pour les étapes pH et bicarbonate pour la correction contrôlée du TAC.
+
+## État du chantier modèle
+
+La branche de travail `feat/sodium-carbonate-model` ajoute un modèle testé et
+le parcours CLI d'étude associé. Il archive le type `Na2CO3`, le libellé du
+produit, sa pureté et sa source (étiquette ou FDS). Une mole de `Na2CO3`
+représente deux équivalents d'alcalinité ; le programme calcule donc le plafond
+théorique imposé par le TAC, corrigé de la pureté déclarée. Il ne crée aucun
+lot à verser. Le modèle affiche aussi le pH théorique au plafond TAC pour
+signaler le risque de dépassement ; ce résultat est indicatif, car le bassin
+réel échange du CO2 et peut contenir d'autres tampons.
+
+Les trois cas de sûreté sont couverts par des tests : pH bas/TAC correct
+(carbonate écarté), pH correct/TAC bas (carbonate écarté), et pH bas/TAC bas
+(plafond TAC seulement, avec alerte de pH). Les étapes 1, 3 et 4 de la section
+précédente restent donc obligatoires avant toute évolution vers un dosage
+opérationnel. En particulier, le produit n'est pas intégré au protocole NaOH /
+bicarbonate et l'étude se termine sans action physique.

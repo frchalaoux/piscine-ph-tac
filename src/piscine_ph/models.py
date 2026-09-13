@@ -39,6 +39,23 @@ class ProtocolMode(StrEnum):
     LOWER_PH_MONITORING = "correction_baisse_ph"
     DISINFECTION_MONITORING = "surveillance_desinfectant"
     HIGH_PH_MONITORING = "surveillance_ph_haut"
+    WATER_MONITORING = "surveillance_eau"
+    SODIUM_CARBONATE_ASSESSMENT = "etude_carbonate_sodium"
+
+
+class AlkalineProduct(StrEnum):
+    """Produits alcalins distingués dans les archives et les calculs."""
+
+    SODIUM_HYDROXIDE = "naoh"
+    SODIUM_BICARBONATE = "nahco3"
+    SODIUM_CARBONATE = "na2co3"
+
+
+class ProductDeclarationSource(StrEnum):
+    """Source traçable d'une information de produit."""
+
+    LABEL = "etiquette"
+    SAFETY_DATA_SHEET = "fds"
 
 
 class ElectrolysisStatus(StrEnum):
@@ -47,6 +64,7 @@ class ElectrolysisStatus(StrEnum):
     UNKNOWN = "inconnu"
     RUNNING = "en_marche"
     STOPPED = "arretee"
+    NOT_INSTALLED = "non_installe"
 
 
 class PhRegulatorStatus(StrEnum):
@@ -55,6 +73,7 @@ class PhRegulatorStatus(StrEnum):
     UNKNOWN = "inconnu"
     RUNNING = "en_marche"
     STOPPED = "arrete"
+    NOT_INSTALLED = "non_installe"
 
 
 class StabilizedTabletStatus(StrEnum):
@@ -92,6 +111,7 @@ class DisinfectionMethod(StrEnum):
     """Source de désinfection active, qui ne peut être choisie qu'une fois."""
 
     UNKNOWN = "inconnu"
+    NONE = "aucune"
     SALT_ELECTROLYSIS = "electrolyse_au_sel"
     STABILIZED_TABLETS = "galets_stabilises"
     STABILIZED_DICHLOR = "dichlore_stabilise"
@@ -105,6 +125,15 @@ class NaOHConcentrationSource(StrEnum):
     GRAMS_PER_LITRE = "g_par_litre"
     MASS_PERCENT = "pourcentage_massique"
     VOLUME_PERCENT = "pourcentage_volumique"
+
+
+class SodiumCarbonateProduct(BaseModel):
+    """Produit pH+ déclaré avant toute étude carbonate."""
+
+    alkaline_product: Literal[AlkalineProduct.SODIUM_CARBONATE] = AlkalineProduct.SODIUM_CARBONATE
+    label: str = Field(min_length=1)
+    purity_percent: float = Field(gt=0, le=100)
+    purity_source: ProductDeclarationSource
 
 
 class TreatmentContext(BaseModel):
@@ -225,6 +254,7 @@ class ProtocolConfig(BaseModel):
     naoh_concentration_source: NaOHConcentrationSource = NaOHConcentrationSource.DEFAULT
     naoh_label_percent: float | None = Field(default=None, gt=0, le=100)
     naoh_density_g_ml: float | None = Field(default=None, gt=0)
+    sodium_carbonate_product: SodiumCarbonateProduct | None = None
     free_chlorine_min_ppm: float = Field(default=1.0, ge=0)
     free_chlorine_max_ppm: float = Field(default=4.0, gt=0)
 
@@ -245,6 +275,17 @@ class ProtocolConfig(BaseModel):
             raise ValueError(
                 "En correction ou surveillance pH haut, le pH initial doit etre strictement superieur a la cible."
             )
+        elif self.mode is ProtocolMode.SODIUM_CARBONATE_ASSESSMENT and (
+            self.sodium_carbonate_product is None
+        ):
+            raise ValueError(
+                "L'etude carbonate exige un produit Na2CO3 avec purete issue de l'etiquette ou de la FDS."
+            )
+        if (
+            self.mode is not ProtocolMode.SODIUM_CARBONATE_ASSESSMENT
+            and self.sodium_carbonate_product is not None
+        ):
+            raise ValueError("Le produit carbonate est reserve au parcours etude_carbonate_sodium.")
         if self.free_chlorine_min_ppm > self.free_chlorine_max_ppm:
             raise ValueError(
                 "La borne basse de chlore libre doit etre inferieure ou egale a la borne haute."
@@ -284,6 +325,19 @@ class CoherenceCheck(BaseModel):
     tac_difference_ppm: float
     inferred_carbon_mol_l: float
     is_consistent: bool
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SodiumCarbonateAssessmentRecord(BaseModel):
+    """Résultat archivé d'une étude sans dose de carbonate à verser."""
+
+    product: SodiumCarbonateProduct
+    ph_measured: float = Field(gt=0, lt=14)
+    tac_measured_ppm: float = Field(gt=0)
+    can_be_considered: bool
+    tac_limited_product_kg: float = Field(ge=0)
+    expected_tac_ppm: float = Field(gt=0)
+    expected_ph_at_tac_limit: float | None = None
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -389,11 +443,13 @@ class ProtocolState(BaseModel):
     ``cumulative_additions`` est recalculé par le service depuis ces listes.
     """
 
-    version: int = 6
+    version: int = 8
     protocol_id: str
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     archive_name: str
+    parent_archive_name: str | None = None
+    parent_protocol_id: str | None = None
     config: ProtocolConfig
     treatment: TreatmentContext = Field(default_factory=TreatmentContext)
     supply_estimate: SupplyEstimate | None = None
@@ -401,6 +457,7 @@ class ProtocolState(BaseModel):
     current_ph: float
     current_tac_ppm: float
     initial_coherence: CoherenceCheck | None = None
+    sodium_carbonate_assessment: SodiumCarbonateAssessmentRecord | None = None
     pending_naoh: PendingNaOHDose | None = None
     pending_acid: PendingAcidDose | None = None
     pending_bicarbonate: PendingBicarbonatePlan | None = None
@@ -420,9 +477,10 @@ class ProtocolState(BaseModel):
         La conversion du contexte de traitement s'effectue dans
         :class:`TreatmentContext`. Conserver un numéro ancien après une écriture
         rendrait toutefois le JSON ambigu : une archive v4 pourrait alors
-        contenir les lots d'acide sulfurique introduits en v6.
+        contenir les lots d'acide sulfurique introduits en v6 et une etude
+        carbonate introduite en v7 et les liens entre archives en v8.
         """
-        self.version = max(self.version, 6)
+        self.version = max(self.version, 8)
         return self
 
     def add_event(self, event: str) -> None:

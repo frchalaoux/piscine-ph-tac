@@ -26,6 +26,24 @@ class BucketPreparation:
     useful_volume_l: float
 
 
+@dataclass(frozen=True)
+class SodiumCarbonateAssessment:
+    """Encadre une éventuelle étude du carbonate de sodium, sans dose à verser.
+
+    ``tac_limited_product_kg`` est la masse maximale théorique compatible avec
+    la cible TAC, pour la pureté déclarée. Ce n'est ni une recommandation ni un
+    lot opérationnel : le pH prédit à cette limite sert précisément à montrer
+    pourquoi le carbonate ne peut pas remplacer automatiquement NaOH et
+    bicarbonate.
+    """
+
+    can_be_considered: bool
+    tac_limited_product_kg: float
+    expected_tac_ppm: float
+    expected_ph_at_tac_limit: float | None
+    warnings: tuple[str, ...]
+
+
 class ChemistryCalculator:
     """Calcule les bilans NaOH/NaHCO3 et contrôle la cohérence pH/TAC.
 
@@ -36,6 +54,7 @@ class ChemistryCalculator:
     # Masses molaires (g/mol) employées dans les conversions de matière.
     molar_mass_naoh_g_mol: ClassVar[float] = 39.997
     molar_mass_nahco3_g_mol: ClassVar[float] = 84.0066
+    molar_mass_na2co3_g_mol: ClassVar[float] = 105.9888
     # Masse équivalente de CaCO3 (g/équivalent), unité usuelle du TAC.
     equivalent_mass_caco3_g_eq: ClassVar[float] = 50.043
     # Constantes d'acidité du système carbonate et produit ionique de l'eau à 25 °C.
@@ -127,6 +146,71 @@ class ChemistryCalculator:
         if remaining:
             batches.append(remaining)
         return batches
+
+    def sodium_carbonate_assessment(
+        self,
+        config: ProtocolConfig,
+        *,
+        current_ph: float,
+        current_tac_ppm: float,
+        purity_percent: float,
+    ) -> SodiumCarbonateAssessment:
+        """Évalue le seul plafond TAC du carbonate de sodium, sans le doser.
+
+        Une mole de ``Na2CO3`` apporte deux équivalents d'alcalinité, contre un
+        pour une mole de ``NaHCO3``. Elle apporte aussi une mole de carbone :
+        le pH théorique à la limite TAC est calculé uniquement pour exposer le
+        risque de dépassement. Les échanges de CO2 et les autres tampons du
+        bassin ne sont pas connus ; le résultat ne doit donc jamais piloter un
+        ajout.
+        """
+        if not 0 < purity_percent <= 100:
+            raise ValueError("La purete du carbonate doit etre comprise entre 0 et 100 %.")
+
+        warnings: list[str] = []
+        if current_ph >= config.target_ph:
+            warnings.append("Le pH est deja a la cible ou au-dessus : carbonate non envisageable.")
+        if current_tac_ppm >= config.target_tac_ppm:
+            warnings.append("Le TAC est deja a la cible ou au-dessus : aucune marge carbonate.")
+
+        carbon_before = self.carbon_from_ph_tac(current_ph, current_tac_ppm)
+        if carbon_before > self.maximum_usable_carbon_mol_l:
+            warnings.append("Le couple pH/TAC ne permet pas un modele carbonate ferme exploitable.")
+
+        if warnings:
+            return SodiumCarbonateAssessment(
+                can_be_considered=False,
+                tac_limited_product_kg=0.0,
+                expected_tac_ppm=current_tac_ppm,
+                expected_ph_at_tac_limit=None,
+                warnings=tuple(warnings),
+            )
+
+        volume_l = config.pool_volume_m3 * 1_000
+        tac_gap_eq_l = self.tac_eq_l(config.target_tac_ppm - current_tac_ppm)
+        pure_moles = tac_gap_eq_l * volume_l / 2
+        purity_fraction = purity_percent / 100
+        product_kg = pure_moles * self.molar_mass_na2co3_g_mol / purity_fraction / 1_000
+        expected_ph = self.ph_from_carbon_alkalinity(
+            carbon_before + pure_moles / volume_l,
+            self.tac_eq_l(config.target_tac_ppm),
+        )
+        if expected_ph > config.target_ph:
+            warnings.append(
+                "A la limite TAC, le modele prevoit un pH au-dessus de la cible : "
+                "aucun lot carbonate ne peut etre deduit de ce plafond."
+            )
+        warnings.append(
+            "Resultat de modelisation uniquement : declarer le produit et re-mesurer pH/TAC "
+            "avant toute decision."
+        )
+        return SodiumCarbonateAssessment(
+            can_be_considered=True,
+            tac_limited_product_kg=product_kg,
+            expected_tac_ppm=config.target_tac_ppm,
+            expected_ph_at_tac_limit=expected_ph,
+            warnings=tuple(warnings),
+        )
 
     def tac_eq_l(self, tac_ppm: float) -> float:
         """Convertit un TAC en ppm CaCO3 en équivalents par litre."""

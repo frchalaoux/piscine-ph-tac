@@ -49,6 +49,15 @@ class JsonProtocolRepository:
         """Charge et valide une archive JSON Pydantic depuis ``path``."""
         return ProtocolState.model_validate_json(path.read_text(encoding="utf-8"))
 
+    def archive(self, archive_name: str) -> ProtocolState | None:
+        """Retourne une archive nommée si elle est lisible et appartient au dépôt."""
+        if Path(archive_name).name != archive_name or not archive_name.startswith("protocole_"):
+            return None
+        try:
+            return self.load(self.root / archive_name)
+        except (OSError, json.JSONDecodeError, ValueError):
+            return None
+
     def active(self) -> ProtocolState | None:
         """Retourne l'archive active la plus récente ou ``None`` si elle n'existe pas."""
         self._migrate_legacy_if_needed()
@@ -77,6 +86,10 @@ class JsonProtocolRepository:
             except (OSError, json.JSONDecodeError, ValueError):
                 continue
         return states
+
+    def successors(self, archive_name: str) -> list[ProtocolState]:
+        """Liste les archives qui déclarent ``archive_name`` comme parent direct."""
+        return [state for state in self.archives() if state.parent_archive_name == archive_name]
 
     def _migrate_legacy_if_needed(self) -> None:
         """Archive une fois le suivi historique sans supprimer sa source.
