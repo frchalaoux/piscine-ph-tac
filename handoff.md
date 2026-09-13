@@ -21,6 +21,14 @@ La publication a été explicitement demandée par l'utilisateur le 13 septembre
 Toute autre publication exige une nouvelle demande explicite, distincte et
 actuelle ; l'autorisation de v0.2.5 ne vaut pas pour une version suivante.
 
+Préférence durable confirmée après la publication : **intégrer les branches
+via une PR**, avec description des changements et des validations avant
+fusion, notamment branche de travail → `staging` et `staging` → `main`.
+La fusion locale suivie d'un push direct utilisée pour v0.2.5 ne doit pas
+devenir le workflow habituel. Une demande générale de merge implique une PR,
+sauf instruction explicite contraire. Cette préférence n'autorise aucune
+opération distante à elle seule ; **keep cool** reste applicable.
+
 L’installation Windows de `v0.2.4` a été validée par un utilisateur : aucun
 travail Windows n’est attendu à ce stade.
 

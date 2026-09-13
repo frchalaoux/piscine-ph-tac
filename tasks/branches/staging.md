@@ -35,6 +35,9 @@ Lire `handoff.md` pour les détails et les limites des parcours.
 
 # Watchouts
 
+- Intégrer les branches via une **PR** décrivant changements et validations
+  avant fusion, notamment vers `staging` puis de `staging` vers `main`.
+  Ne pas faire de fusion locale suivie d'un push direct sauf demande explicite.
 - **Keep cool** : aucune nouvelle publication distante sans une demande
   explicite, séparée et actuelle. L'autorisation de publier v0.2.5 est exécutée.
 - Ne pas modifier ni supprimer les tags existants, notamment v0.2.0 à v0.2.2.
