@@ -19,10 +19,13 @@ from .models import (
     NaOHConcentrationSource,
     PendingBicarbonatePlan,
     PhRegulatorStatus,
+    ProductDeclarationSource,
     ProtocolConfig,
     ProtocolMode,
     ProtocolState,
     ProtocolStep,
+    SodiumCarbonateAssessmentRecord,
+    SodiumCarbonateProduct,
     StabilizedTabletProduct,
     StabilizedTabletStatus,
     TreatmentContext,
@@ -48,13 +51,19 @@ def show_protocol_catalog() -> None:
     typer.secho("PROTOCOLES DISPONIBLES", fg=typer.colors.GREEN, bold=True)
     typer.echo("1. Correction pH")
     typer.echo("   - Hausse pH : soude puis controle TAC ; doses en petits lots et mesure.")
-    typer.echo("   - Baisse pH : acide sulfurique 15 % ; lot etiquette limite a -0,1 pH puis mesure.")
+    typer.echo(
+        "   - Baisse pH : acide sulfurique 15 % ; lot etiquette limite a -0,1 pH puis mesure."
+    )
     typer.echo("2. Correction TAC")
     typer.echo("   - Hausse TAC : bicarbonate calcule en lots, puis mesure de confirmation.")
     typer.echo("3. Desinfectant")
     typer.echo("   - Galets stabilises : suivi du chlore libre, des galets et du CYA.")
-    typer.echo("     Une charge initiale peut etre proposee uniquement depuis le ratio de l'etiquette.")
+    typer.echo(
+        "     Une charge initiale peut etre proposee uniquement depuis le ratio de l'etiquette."
+    )
     typer.echo("     Profils FDS : GCCHL4EC multifonctions et GCCHLLEC chlore lent (trichlore).")
+    typer.echo("4. Etude carbonate de sodium (pH+)")
+    typer.echo("   - Produit et purete archives ; plafond TAC indicatif, sans dose a verser.")
     typer.secho(
         "Securite : ne jamais melanger acide et galets au trichlore, ni les mettre dans le meme recipient/doseur.",
         fg=typer.colors.YELLOW,
@@ -176,6 +185,34 @@ def show_supply_estimate(state: ProtocolState) -> None:
     )
 
 
+def show_sodium_carbonate_assessment(record: SodiumCarbonateAssessmentRecord) -> None:
+    """Présente une étude carbonate archivée sans la transformer en dosage."""
+    typer.secho("ETUDE CARBONATE DE SODIUM — AUCUNE DOSE", fg=typer.colors.CYAN, bold=True)
+    typer.echo(
+        f"Produit archive : {record.product.label} (Na2CO3, {record.product.purity_percent:.1f} %, "
+        f"source {record.product.purity_source.value})."
+    )
+    typer.echo(
+        f"Mesures etudiees : pH {record.ph_measured:.2f}, TAC {record.tac_measured_ppm:.0f} ppm."
+    )
+    if record.can_be_considered:
+        typer.echo(
+            f"Plafond theorique avant la cible TAC : {record.tac_limited_product_kg:.2f} kg "
+            "(ce n'est pas une dose ni un lot)."
+        )
+        if record.expected_ph_at_tac_limit is not None:
+            typer.echo(
+                f"pH theorique a ce plafond : {record.expected_ph_at_tac_limit:.2f} "
+                f"; TAC theorique : {record.expected_tac_ppm:.0f} ppm."
+            )
+    else:
+        typer.secho(
+            "Carbonate ecarte pour ces mesures : aucun lot n'est propose.", fg=typer.colors.YELLOW
+        )
+    for warning in record.warnings:
+        typer.secho(f"Alerte : {warning}", fg=typer.colors.YELLOW)
+
+
 def show_naoh_declaration(state: ProtocolState) -> None:
     """Affiche la concentration réellement archivée et son mode de détermination."""
     config = state.config
@@ -253,12 +290,13 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
     """Collecte le traitement qui influence les avertissements et le stock conseillé."""
     typer.secho("TRAITEMENT EN COURS", fg=typer.colors.CYAN, bold=True)
     electrolysis_choice = prompted_choice(
-        "Etat de l'electrolyse ?", ["Arretee", "En marche", "Inconnu"], default=3
+        "Etat de l'electrolyse ?", ["Arretee", "En marche", "Inconnu", "Non installee"], default=3
     )
     electrolysis = {
         1: ElectrolysisStatus.STOPPED,
         2: ElectrolysisStatus.RUNNING,
         3: ElectrolysisStatus.UNKNOWN,
+        4: ElectrolysisStatus.NOT_INSTALLED,
     }[electrolysis_choice]
     disinfection_choice = prompted_choice(
         "Quelle desinfection est active ?",
@@ -268,6 +306,7 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
             "Dichlore stabilise",
             "Chlore non stabilise",
             "Inconnue",
+            "Aucune desinfection active",
         ],
         default=5,
     )
@@ -277,29 +316,29 @@ def prompt_treatment_context() -> tuple[TreatmentContext, float | None]:
         3: DisinfectionMethod.STABILIZED_DICHLOR,
         4: DisinfectionMethod.UNSTABILIZED_CHLORINE,
         5: DisinfectionMethod.UNKNOWN,
+        6: DisinfectionMethod.NONE,
     }[disinfection_choice]
     regulator_choice = prompted_choice(
-        "Etat du regulateur de pH ?", ["Arrete", "En marche", "Inconnu"], default=3
+        "Etat du regulateur de pH ?", ["Arrete", "En marche", "Inconnu", "Non installe"], default=3
     )
     regulator = {
         1: PhRegulatorStatus.STOPPED,
         2: PhRegulatorStatus.RUNNING,
         3: PhRegulatorStatus.UNKNOWN,
+        4: PhRegulatorStatus.NOT_INSTALLED,
     }[regulator_choice]
-    tablets = StabilizedTabletStatus.UNKNOWN
-    if disinfection is DisinfectionMethod.STABILIZED_TABLETS:
-        tablet_choice = prompted_choice(
-            "Etat des galets dans le doseur ?",
-            ["En place", "Consommes", "Suspendus", "Non necessaires", "Inconnu"],
-            default=5,
-        )
-        tablets = {
-            1: StabilizedTabletStatus.ACTIVE,
-            2: StabilizedTabletStatus.CONSUMED,
-            3: StabilizedTabletStatus.PAUSED,
-            4: StabilizedTabletStatus.NOT_NEEDED,
-            5: StabilizedTabletStatus.UNKNOWN,
-        }[tablet_choice]
+    tablet_choice = prompted_choice(
+        "Etat des galets dans le doseur ?",
+        ["En place", "Consommes", "Suspendus", "Non necessaires", "Inconnu"],
+        default=5,
+    )
+    tablets = {
+        1: StabilizedTabletStatus.ACTIVE,
+        2: StabilizedTabletStatus.CONSUMED,
+        3: StabilizedTabletStatus.PAUSED,
+        4: StabilizedTabletStatus.NOT_NEEDED,
+        5: StabilizedTabletStatus.UNKNOWN,
+    }[tablet_choice]
     cya = None
     if disinfection in {
         DisinfectionMethod.STABILIZED_TABLETS,
@@ -346,7 +385,9 @@ def show_acid_plan(state: ProtocolState) -> None:
     if pending is None:
         return
     typer.secho("Lot d'acide sulfurique 15 % prepare", fg=typer.colors.GREEN)
-    typer.echo(f"Verser au maximum {pending.acid_ml:.0f} mL, filtration en marche, devant les buses.")
+    typer.echo(
+        f"Verser au maximum {pending.acid_ml:.0f} mL, filtration en marche, devant les buses."
+    )
     typer.secho(
         "Ne pas verser dans le skimmer ou un doseur de galets ; ne pas manipuler les galets en meme temps.",
         fg=typer.colors.YELLOW,
@@ -367,7 +408,8 @@ def start(
         typer.Option(
             help=(
                 "Parcours : correction_hausse_ph_tac, correction_hausse_tac, "
-                "correction_baisse_ph, surveillance_desinfectant ou surveillance_ph_haut."
+                "correction_baisse_ph, surveillance_eau, surveillance_desinfectant ou "
+                "surveillance_ph_haut."
             )
         ),
     ] = ProtocolMode.RAISE_PH_TAC,
@@ -381,10 +423,10 @@ def start(
     ),
     bucket_l: float = typer.Option(SETTINGS.protocol.bucket_volume_l, min=0.01),
     electrolysis: Annotated[
-        ElectrolysisStatus, typer.Option(help="Etat initial : inconnu, en_marche ou arretee.")
-    ] = ElectrolysisStatus.UNKNOWN,
+        ElectrolysisStatus | None, typer.Option(help="Etat initial : inconnu, en_marche ou arretee.")
+    ] = None,
     disinfection: Annotated[
-        DisinfectionMethod,
+        DisinfectionMethod | None,
         typer.Option(
             "--disinfection",
             "--chlorine",
@@ -394,25 +436,25 @@ def start(
                 "--chlorine reste un alias historique."
             ),
         ),
-    ] = DisinfectionMethod.UNKNOWN,
+    ] = None,
     ph_regulator: Annotated[
-        PhRegulatorStatus, typer.Option(help="Etat : inconnu, en_marche ou arrete.")
-    ] = PhRegulatorStatus.UNKNOWN,
+        PhRegulatorStatus | None, typer.Option(help="Etat : inconnu, en_marche ou arrete.")
+    ] = None,
     tablets: Annotated[
-        StabilizedTabletStatus,
+        StabilizedTabletStatus | None,
         typer.Option(
             help="Etat des galets : inconnu, en_place, consommes, suspendus ou non_necessaires."
         ),
-    ] = StabilizedTabletStatus.UNKNOWN,
+    ] = None,
     tablet_product: Annotated[
-        StabilizedTabletProduct,
+        StabilizedTabletProduct | None,
         typer.Option(
             help=(
                 "Profil facultatif : trichlore_multifonctions_gcchl4ec seulement si ce produit "
                 "est bien celui du doseur."
             )
         ),
-    ] = StabilizedTabletProduct.UNKNOWN,
+    ] = None,
     chlorine_min: float = typer.Option(
         1.0, min=0, help="Borne basse de chlore libre issue de l'etiquette, en ppm."
     ),
@@ -422,6 +464,16 @@ def start(
     naoh_g_l: float | None = typer.Option(
         None, min=0.01, help="Concentration directe de NaOH en g/L (mode non guide)."
     ),
+    carbonate_product_label: str | None = typer.Option(
+        None, help="Libelle du pH+ Na2CO3 lu sur l'etiquette ou la FDS."
+    ),
+    carbonate_purity_percent: float | None = typer.Option(
+        None, min=0.01, max=100, help="Purete Na2CO3 en %, sans valeur supposee."
+    ),
+    carbonate_purity_source: Annotated[
+        ProductDeclarationSource,
+        typer.Option(help="Origine de la purete : etiquette ou fds."),
+    ] = ProductDeclarationSource.LABEL,
     guided: bool = typer.Option(
         True,
         "--guided/--no-guided",
@@ -430,19 +482,45 @@ def start(
     force: bool = typer.Option(
         False, help="Archive un nouveau protocole meme si un autre est actif."
     ),
+    follow_up_from: str | None = typer.Option(
+        None,
+        "--follow-up-from",
+        help=(
+            "Nom d'une archive terminee ou annulee dont ce protocole est la suite. "
+            "Les mesures restent a verifier dans le bassin."
+        ),
+    ),
 ) -> None:
     """Crée un protocole ou reprend l'archive active ; ``--force`` crée un nouveau."""
     try:
         protocol_service = service()
         existing = protocol_service.repository.active()
+        follow_up_parent = (
+            protocol_service.repository.archive(follow_up_from) if follow_up_from is not None else None
+        )
+        if follow_up_from is not None and follow_up_parent is None:
+            raise ValueError("Archive parente introuvable.")
+        if follow_up_parent is not None:
+            typer.echo(
+                "Suite de "
+                f"{follow_up_parent.archive_name} : dernières mesures pH {follow_up_parent.current_ph:.2f}, "
+                f"TAC {follow_up_parent.current_tac_ppm:.0f} ppm. "
+                "En mode guidé, elles sont proposées ; sinon, saisissez vos nouvelles mesures."
+            )
+            if guided:
+                initial_ph = follow_up_parent.current_ph
+                initial_tac = follow_up_parent.current_tac_ppm
+                volume_m3 = follow_up_parent.config.pool_volume_m3
         initial_cya: float | None = None
         if guided and (existing is None or force):
             typer.secho("QUESTIONNAIRE DE DEMARRAGE", fg=typer.colors.GREEN, bold=True)
             typer.echo("Les valeurs entrees seront archivees avec ce protocole.")
+            treatment, initial_cya = prompt_treatment_context()
+            protocol_service.require_treatment_context(treatment)
             show_protocol_catalog()
             family = prompted_choice(
                 "Quelle famille de protocole voulez-vous ouvrir ?",
-                ["Correction de pH", "Correction de TAC", "Desinfectant"],
+                ["Correction de pH", "Correction de TAC", "Desinfectant", "Etude carbonate pH+"],
             )
             if family == 1:
                 ph_path = prompted_choice(
@@ -460,20 +538,47 @@ def start(
                 }[ph_path]
             elif family == 2:
                 mode = ProtocolMode.RAISE_TAC
-            else:
+            elif family == 3:
                 mode = ProtocolMode.DISINFECTION_MONITORING
+            else:
+                mode = ProtocolMode.SODIUM_CARBONATE_ASSESSMENT
 
             initial_ph = typer.prompt("pH mesure au depart", default=initial_ph, type=float)
             initial_tac = typer.prompt("TAC mesure en ppm CaCO3", default=initial_tac, type=float)
-            if mode in {ProtocolMode.RAISE_PH_TAC, ProtocolMode.LOWER_PH_MONITORING, ProtocolMode.HIGH_PH_MONITORING}:
+            if mode in {
+                ProtocolMode.RAISE_PH_TAC,
+                ProtocolMode.LOWER_PH_MONITORING,
+                ProtocolMode.HIGH_PH_MONITORING,
+                ProtocolMode.SODIUM_CARBONATE_ASSESSMENT,
+            }:
                 target_ph = typer.prompt("pH cible", default=target_ph, type=float)
-            if mode in {ProtocolMode.RAISE_PH_TAC, ProtocolMode.RAISE_TAC}:
+            if mode in {
+                ProtocolMode.RAISE_PH_TAC,
+                ProtocolMode.RAISE_TAC,
+                ProtocolMode.SODIUM_CARBONATE_ASSESSMENT,
+            }:
                 volume_m3 = typer.prompt("Volume du bassin en m3", default=volume_m3, type=float)
             if mode is ProtocolMode.RAISE_TAC:
                 initial_tac = typer.prompt(
                     "TAC initial en ppm CaCO3", default=initial_tac, type=float
                 )
                 target_tac = typer.prompt("TAC cible en ppm CaCO3", default=target_tac, type=float)
+            if mode is ProtocolMode.SODIUM_CARBONATE_ASSESSMENT:
+                target_tac = typer.prompt("TAC cible en ppm CaCO3", default=target_tac, type=float)
+                typer.secho(
+                    "Lire l'etiquette ou la FDS : cette etude ne propose aucune dose a verser.",
+                    fg=typer.colors.YELLOW,
+                )
+                carbonate_product_label = typer.prompt("Libelle du produit Na2CO3", type=str)
+                carbonate_purity_percent = typer.prompt("Purete Na2CO3 en %", type=float)
+                source_choice = prompted_choice(
+                    "Origine de cette purete ?", ["Etiquette", "FDS"], default=1
+                )
+                carbonate_purity_source = (
+                    ProductDeclarationSource.LABEL
+                    if source_choice == 1
+                    else ProductDeclarationSource.SAFETY_DATA_SHEET
+                )
             if mode is ProtocolMode.DISINFECTION_MONITORING:
                 chlorine_min = typer.prompt(
                     "Borne basse chlore libre selon l'etiquette, en ppm",
@@ -495,7 +600,6 @@ def start(
                 source = NaOHConcentrationSource.DEFAULT
                 percent = None
                 density = None
-            treatment, initial_cya = prompt_treatment_context()
             if treatment.disinfection_method is DisinfectionMethod.STABILIZED_TABLETS:
                 product_choice = prompted_choice(
                     "Quel galet utilisez-vous ?",
@@ -524,14 +628,31 @@ def start(
             )
             percent = None
             density = None
-            treatment = TreatmentContext(
-                electrolysis_status=electrolysis,
-                disinfection_method=disinfection,
-                ph_regulator_status=ph_regulator,
-                stabilized_tablet_status=tablets,
-                stabilized_tablet_product=tablet_product,
+            values = (follow_up_parent.treatment.model_dump() if follow_up_parent
+                      else TreatmentContext().model_dump())
+            for field, value in (
+                ("electrolysis_status", electrolysis), ("disinfection_method", disinfection),
+                ("ph_regulator_status", ph_regulator), ("stabilized_tablet_status", tablets),
+                ("stabilized_tablet_product", tablet_product),
+            ):
+                if value is not None:
+                    values[field] = value
+            if values["disinfection_method"] != DisinfectionMethod.STABILIZED_TABLETS:
+                values["stabilized_tablet_product"] = StabilizedTabletProduct.UNKNOWN
+            treatment = TreatmentContext.model_validate(values)
+            if mode is not ProtocolMode.SODIUM_CARBONATE_ASSESSMENT:
+                target_tac = SETTINGS.protocol.target_tac_ppm
+        carbonate_product = None
+        if mode is ProtocolMode.SODIUM_CARBONATE_ASSESSMENT:
+            if carbonate_product_label is None or carbonate_purity_percent is None:
+                raise ValueError(
+                    "L'etude carbonate exige --carbonate-product-label et --carbonate-purity-percent."
+                )
+            carbonate_product = SodiumCarbonateProduct(
+                label=carbonate_product_label,
+                purity_percent=carbonate_purity_percent,
+                purity_source=carbonate_purity_source,
             )
-            target_tac = SETTINGS.protocol.target_tac_ppm
         config = ProtocolConfig(
             mode=mode,
             pool_volume_m3=volume_m3,
@@ -545,6 +666,7 @@ def start(
             naoh_concentration_source=source,
             naoh_label_percent=percent,
             naoh_density_g_ml=density,
+            sodium_carbonate_product=carbonate_product,
             free_chlorine_min_ppm=chlorine_min,
             free_chlorine_max_ppm=chlorine_max,
         )
@@ -552,18 +674,23 @@ def start(
             config,
             treatment=treatment,
             replace_active=force,
+            follow_up_from=follow_up_from,
         )
         if initial_cya is not None and (existing is None or force):
             state = protocol_service.record_cyanuric_acid_measurement(initial_cya)
     except ValueError as error:
         raise typer.BadParameter(str(error)) from error
-    if existing and not force:
+    if existing and not force and state.archive_name == existing.archive_name:
         typer.secho(f"Protocole actif repris : {state.archive_name}", fg=typer.colors.GREEN)
         typer.echo(f"Etape actuelle : {state.step}")
     else:
         typer.secho(f"Protocole cree : {state.archive_name}", fg=typer.colors.GREEN)
+    if state.parent_archive_name:
+        typer.echo(f"Suite de l'archive : {state.parent_archive_name}")
     if state.config.mode is ProtocolMode.RAISE_PH_TAC:
         show_naoh_declaration(state)
+    if state.sodium_carbonate_assessment:
+        show_sodium_carbonate_assessment(state.sodium_carbonate_assessment)
     if state.initial_coherence and state.initial_coherence.warnings:
         for warning in state.initial_coherence.warnings:
             typer.secho(f"Alerte initiale : {warning}", fg=typer.colors.YELLOW)
@@ -715,7 +842,9 @@ def plan_tablets(
     except ValueError as error:
         typer.echo(str(error))
         raise typer.Exit(1)
-    typer.secho(f"Charge initiale issue du ratio declare : {count} galet(s).", fg=typer.colors.GREEN)
+    typer.secho(
+        f"Charge initiale issue du ratio declare : {count} galet(s).", fg=typer.colors.GREEN
+    )
     typer.echo(
         f"Base : 1 galet pour {ratio:.0f} m3, bassin {state.config.pool_volume_m3:.0f} m3. "
         "Confirmez l'etiquette, puis enregistrez seulement les galets reellement poses."
@@ -745,7 +874,8 @@ def record_water(
     ph: Annotated[float, typer.Option(min=0.01, max=13.99)],
     tac: Annotated[float, typer.Option(min=0.01)],
     free_chlorine: Annotated[
-        float | None, typer.Option("--free-chlorine", min=0, help="Requis en protocole desinfectant.")
+        float | None,
+        typer.Option("--free-chlorine", min=0, help="Requis en protocole desinfectant."),
     ] = None,
 ) -> None:
     """Archive une mesure pH/TAC/chlore sans préparer ni compter un produit."""
@@ -1109,7 +1239,9 @@ def history() -> None:
 def show_json(
     archive: Annotated[
         str | None,
-        typer.Argument(help="Nom d'une archive listée par `piscine-ph history` (actif par défaut)."),
+        typer.Argument(
+            help="Nom d'une archive listée par `piscine-ph history` (actif par défaut)."
+        ),
     ] = None,
 ) -> None:
     """Affiche, sans le modifier, le JSON du protocole actif ou d'une archive."""
@@ -1122,9 +1254,13 @@ def show_json(
             typer.echo(str(error))
             raise typer.Exit(1)
     else:
-        state = next((state for state in repository.archives() if state.archive_name == archive), None)
+        state = next(
+            (state for state in repository.archives() if state.archive_name == archive), None
+        )
         if state is None:
-            typer.echo("Archive introuvable. Utilisez `piscine-ph history` pour lister les archives.")
+            typer.echo(
+                "Archive introuvable. Utilisez `piscine-ph history` pour lister les archives."
+            )
             raise typer.Exit(1)
     try:
         typer.echo((repository.root / state.archive_name).read_text(encoding="utf-8"), nl=False)

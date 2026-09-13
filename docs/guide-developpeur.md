@@ -187,6 +187,17 @@ Les constantes physico-chimiques, les limites de préparation du seau, les tolé
 
 `ProtocolState` dans `models.py` est le format de référence sérialisé dans chaque archive JSON. Toute modification compatible de ce modèle doit conserver des valeurs par défaut pour les nouveaux champs afin que les anciennes archives restent lisibles.
 
+`ProtocolService.guided_action()` est la table de décision déterministe du
+parcours TUI : elle sélectionne la seule prochaine action autorisée depuis
+l’état persistant. La TUI l’affiche et navigue vers sa destination ; elle ne
+recode pas les transitions. Une action préparée doit toujours y primer sur une
+nouvelle préparation afin d’imposer sa confirmation ou son annulation.
+
+Les tests TUI doivent couvrir un workflow complet pour chaque famille : une
+correction pH/TAC jusqu’à sa fermeture, une baisse pH jusqu’à sa fermeture et
+une surveillance de désinfection sans dose. Tester seulement les boutons isolés
+ne suffit pas à valider l’assistant.
+
 Les étapes possibles sont définies par `ProtocolStep` :
 
 ```text
@@ -198,7 +209,7 @@ Les transitions ne sont effectuées que dans `ProtocolService` :
 
 | Méthode | Effet principal |
 | --- | --- |
-| `start` | Crée une archive, ou reprend le protocole actif. |
+| `start` | Crée une archive, reprend le protocole actif, ou l’enchaîne explicitement avec `--follow-up-from`. |
 | `prepare_naoh` | Crée une dose de NaOH en attente. |
 | `record_naoh_measurement` | Confirme la dose avec une mesure et actualise l'étape. |
 | `plan_bicarbonate` | Crée un apport de bicarbonate en attente. |
@@ -209,7 +220,7 @@ Les transitions ne sont effectuées que dans `ProtocolService` :
 
 `JsonProtocolRepository` recrée `data/protocoles/` à son initialisation si le dossier est absent, ce qui rend un clone GitHub immédiatement utilisable. `save()` écrit ensuite d'abord un fichier `.tmp`, puis le remplace : cette écriture atomique évite normalement une archive partiellement écrite si le programme est interrompu.
 
-Une archive est active tant que son étape n'est ni `termine` ni `annule`. `start` reprend la plus récente archive active ; `start --force` crée une nouvelle archive sans modifier la précédente.
+Une archive est active tant que son étape n'est ni `termine` ni `annule`. `start` reprend la plus récente archive active ; `start --force` crée une nouvelle archive sans modifier la précédente. Après une archive terminale, `start --follow-up-from NOM_ARCHIVE` crée une archive fille et persiste `parent_archive_name` et `parent_protocol_id` : la relation est traçable sans modifier l’historique parent.
 
 ## Invariants à préserver
 
