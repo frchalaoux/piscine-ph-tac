@@ -1,52 +1,43 @@
 # Objective
 
-Faire évoluer `piscine-ph` vers des protocoles CLI distincts pour le pH, le
-TAC et le désinfectant, sans transformer les FDS en consignes de dosage.
+Fiabiliser les parcours TUI et conserver un contexte d'installation explicite
+avant tout nouveau protocole pH, TAC, désinfection, mesure ou étude carbonate.
 
 # Current Status
 
-- Les modes `correction_hausse_tac`, `correction_baisse_ph` et
-  `surveillance_desinfectant` complètent le parcours historique et restent
-  persistés dans le JSON v6.
-- Les galets au trichlore `GCCHL4EC` et `GCCHLLEC` sont des profils séparés.
-  L'application conserve l'incompatibilité avec l'acide sulfurique et ne
-  calcule jamais de quantité d'acide ou de galets sans notice de dosage.
-- L'installateur Windows force désormais Python 3.11 afin de ne pas réutiliser
-  un Python 3.10 incompatible.
-- La branche `test-cli-windows` a été intégrée à `staging` par avance rapide au
-  commit `866a01a` le 10 septembre 2026.
-- Les releases `v0.2.0` à `v0.2.3` ont été publiées. La version `v0.2.3`,
-  disponible sur `staging` et `origin/staging`, contient le parcours CLI pH bas
-  et galets issu de `test-cli-windows`.
+- **v0.2.5 publiée le 13 septembre 2026**, à la demande explicite de l'utilisateur.
+- Commit fonctionnel `9a5a750`, branche distante `feat/sodium-carbonate-model`.
+- Fusion dans `staging` : `e25c03a` ; commit de release `feba09e`, tag annoté `v0.2.5`.
+- La source de désinfection et les trois états d'appareils sont obligatoires
+  avant toute création. Le contexte est repris lors des enchaînements et les
+  anciennes archives restent consultables.
+- Les boutons de navigation après correction sont corrigés. La désinfection
+  affiche le bilan enregistré et permet de clôturer le suivi pour choisir la suite.
+- Les archives affichent mesures, seuils min/max et chemin du fichier.
+- L'étude carbonate et la recherche manuelle de FDS sont documentées ; aucune
+  dose opérationnelle de carbonate n'est créée.
 
 # Next Concrete Action
 
-Recueillir le retour d'installation Windows de `v0.2.3`. Corriger localement,
-tester et montrer le résultat à l'utilisateur ; ne publier qu'après son accord
-explicite.
+Recueillir le retour utilisateur sur le parcours publié : déclaration initiale,
+correction pH, bilan de désinfection et consultation des archives.
+Lire `handoff.md` pour les détails et les limites des parcours.
 
 # Validation Snapshot
 
-- Le 11 septembre 2026 : `uv run ruff check .` est vert et
-  `uv run pytest -q` réussit avec 53 tests.
-- `sh -n install.sh` est valide.
-
-# Key Files
-
-- `install.ps1`, `install.sh`
-- `src/piscine_ph/cli.py`
-- `src/piscine_ph/models.py`
-- `src/piscine_ph/service.py`
-- `docs/produits-et-securite.md`
-- `docs/fichiers-json.md`
+- `uv run ruff check .` : vert.
+- Suite complète au moment de publier : **113 passed**.
+- `uv build` et `git diff --check` : verts ; distributions `0.2.5` construites.
+- Installation isolée depuis l'archive du tag `v0.2.5` sous Python 3.11 :
+  lancement de `piscine-ph --help` réussi.
+- Aucun nouveau test Windows manuel effectué ; l'installation Windows de
+  v0.2.4 avait été validée par un utilisateur.
 
 # Watchouts
 
-- **Directive utilisateur prioritaire — « keep cool » : ne jamais créer,
-  déplacer ou publier un tag, une release ou une mise à jour distante sans une
-  demande explicite et distincte de l'utilisateur.** Préparer et tester est
-  autorisé ; s'arrêter avant toute publication et demander confirmation.
-- Ne pas supprimer les tags `v0.2.0`, `v0.2.1` ou `v0.2.2` : l'utilisateur a
-  explicitement demandé de les conserver.
-- Ne jamais proposer de mélange entre l'acide sulfurique et les galets au
-  trichlore. Une FDS renseigne la sécurité, pas une posologie.
+- **Keep cool** : aucune nouvelle publication distante sans une demande
+  explicite, séparée et actuelle. L'autorisation de publier v0.2.5 est exécutée.
+- Ne pas modifier ni supprimer les tags existants, notamment v0.2.0 à v0.2.2.
+- Les données restent dans `data/protocoles`, relatif au dossier de lancement.
+- Ne pas déduire une dose de carbonate de doses de soude et de bicarbonate.
+- Ne jamais proposer de mélange entre acide sulfurique et galets au trichlore.

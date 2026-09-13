@@ -9,11 +9,17 @@ archive les mesures d’une piscine et guide des corrections pH/TAC par lots
 confirmés. La logique métier vit dans `ProtocolService` ; les interfaces ne
 doivent pas recalculer leurs propres règles.
 
-L’état de travail actuel est entièrement **local et non commité** sur la
-branche `feat/sodium-carbonate-model`, issue de `da7e541` (`v0.2.4`). La version
-déclarée reste `0.2.4`. Ne pas considérer ces changements comme publiés. Ne
-pas pousser, créer de tag ou de release sans demande explicite, distincte et
-actuelle de l’utilisateur.
+La version **0.2.5** est publiée depuis `staging` :
+[release v0.2.5](https://github.com/frchalaoux/piscine-ph-tac/releases/tag/v0.2.5).
+
+- Commit des évolutions : `9a5a750`, poussé sur `feat/sodium-carbonate-model`.
+- Fusion dans `staging` : `e25c03a`.
+- Commit de release et cible du tag annoté `v0.2.5` : `feba09e`.
+- Branche de travail actuelle : `staging`. Les anciennes versions sont conservées.
+
+La publication a été explicitement demandée par l'utilisateur le 13 septembre.
+Toute autre publication exige une nouvelle demande explicite, distincte et
+actuelle ; l'autorisation de v0.2.5 ne vaut pas pour une version suivante.
 
 L’installation Windows de `v0.2.4` a été validée par un utilisateur : aucun
 travail Windows n’est attendu à ce stade.
@@ -193,7 +199,13 @@ appareils en premier, avant tout protocole**, et pas seulement la désinfection.
 - `uv run ruff check .`, `uv build` et `git diff --check` : verts.
 - L'utilisateur a demandé le commit, le push, l'intégration à `origin/staging`
   et la publication de **v0.2.5**. Cette autorisation est propre à cette opération.
-- Validation finale et publication à consigner après leur réalisation.
+- Publication terminée par `scripts/release.py 0.2.5 --publish` : tag annoté,
+  branche `origin/staging` et release GitHub vérifiés au commit `feba09e`.
+- Le script de publication a relancé les **113 tests** avec succès, puis Ruff,
+  la construction et la vérification des différences sont verts.
+- Installation isolée depuis l'archive GitHub du tag, sous Python 3.11 :
+  `piscine-ph --help` fonctionne. Aucun outil global utilisateur n'a été remplacé.
+- Les notes de release décrivent le contexte obligatoire et les nouveaux parcours.
 
 ## Validation précédente (bilan de désinfection)
 
@@ -238,31 +250,9 @@ appareils en premier, avant tout protocole**, et pas seulement la désinfection.
 
 ## État Git
 
-Les fichiers suivants sont volontairement modifiés ou nouveaux et ne doivent
-pas être écrasés :
-
-```text
-M  .gitignore
-M  README.md
-M  docs/evolution-carbonate-sodium.md
-M  docs/fichiers-json.md
-M  docs/guide-developpeur.md
-M  docs/guide-utilisateur.md
-M  docs/produits-et-securite.md
-M  handoff.md
-M  src/piscine_ph/chemistry.py
-M  src/piscine_ph/cli.py
-M  src/piscine_ph/models.py
-M  src/piscine_ph/repository.py
-M  src/piscine_ph/service.py
-M  src/piscine_ph/tui.py
-M  tests/test_chemistry.py
-M  tests/test_cli.py
-M  tests/test_service.py
-M  tests/test_tui.py
-?? docs/choisir-un-protocole.md
-?? docs/rechercher-une-fds.md
-```
+Les évolutions décrites ci-dessus sont commitées et publiées. La version déclarée
+est `0.2.5`. `staging` contient aussi la mise à jour documentaire de reprise
+postérieure au tag ; le code publié reste celui de `feba09e`.
 
 ## Suite recommandée
 
