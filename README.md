@@ -7,13 +7,13 @@ Outil en ligne de commande pour suivre une correction progressive du pH, du TAC 
 Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'application :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.5/install.sh | sh
 ```
 
 Sous Windows 10 ou 11, ouvrir Windows PowerShell et exécuter (Git n'est pas nécessaire) :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.5/install.ps1 | iex
 ```
 
 Ensuite, depuis n'importe quel dossier (rouvrir le terminal après une première installation de `uv`) :
@@ -27,12 +27,14 @@ piscine-ph menu
 Le suivi est stocke dans `data/protocoles/` : chaque protocole est archive dans son propre fichier JSON date.
 
 Voir le [guide utilisateur](docs/guide-utilisateur.md) pour l'utilisation pas a pas, la [documentation technique](docs/protocole_ph_tac.md) pour les calculs et limites scientifiques, et le [guide développeur](docs/guide-developpeur.md) pour l'architecture et la maintenance.
+Le rôle de chaque parcours, ses valeurs et son bon moment d'utilisation sont décrits dans le [guide de choix des protocoles](docs/choisir-un-protocole.md).
 Les paramètres par défaut versionnés sont décrits dans la [documentation de configuration](docs/configuration.md).
 La structure et la lecture des paramètres et archives sont détaillées dans la [référence des fichiers JSON](docs/fichiers-json.md).
 Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
 Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
 Le cas « pH haut, TAC à confirmer et chlore faible ou fort » est décrit dans le [guide de surveillance](docs/surveillance-ph-haut-chlore.md).
 Les profils des produits déclarés, les FDS associées et les limites de sécurité sont réunis dans le [guide produits et sécurité](docs/produits-et-securite.md).
+La méthode manuelle pour récupérer puis vérifier une FDS est détaillée dans le [guide de recherche des FDS](docs/rechercher-une-fds.md) ; l’application ne fait aucune recherche ou interprétation automatique.
 
 ## Commandes principales
 
@@ -55,11 +57,11 @@ piscine-ph record-tablets --count 2 --unit-mass-g 200
 piscine-ph plan-tablets
 piscine-ph measure-cya --cya 35
 piscine-ph tui
-piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4
+piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
 piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
-piscine-ph start --no-guided --force --mode correction_hausse_tac --initial-tac 60 --target-tac 80
-piscine-ph start --no-guided --force --mode correction_baisse_ph --initial-ph 7.6 --target-ph 7.2
-piscine-ph start --no-guided --force --mode surveillance_desinfectant --disinfection galets_stabilises --tablet-product trichlore_lent_gcchllec
+piscine-ph start --no-guided --force --mode correction_hausse_tac --initial-tac 60 --target-tac 80 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
+piscine-ph start --no-guided --force --mode correction_baisse_ph --initial-ph 7.6 --target-ph 7.2 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
+piscine-ph start --no-guided --force --mode surveillance_desinfectant --disinfection galets_stabilises --tablet-product trichlore_lent_gcchllec --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
 piscine-ph history
 piscine-ph json
 ```
@@ -74,4 +76,4 @@ l'étiquette, jamais un ajout enregistré automatiquement.
 
 ## Mises à jour
 
-L'installation est figée sur la version `v0.2.4`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.
+L'installation est figée sur la version `v0.2.5`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.

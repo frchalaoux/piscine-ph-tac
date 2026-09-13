@@ -3,15 +3,18 @@
 import json
 
 import pytest
+from conftest import declared_treatment
 
 from piscine_ph.models import (
     DisinfectionMethod,
     ElectrolysisStatus,
     NaOHConcentrationSource,
     PhRegulatorStatus,
+    ProductDeclarationSource,
     ProtocolConfig,
     ProtocolMode,
     ProtocolStep,
+    SodiumCarbonateProduct,
     StabilizedTabletProduct,
     StabilizedTabletStatus,
     TreatmentContext,
@@ -22,7 +25,7 @@ from piscine_ph.service import ProtocolService
 
 def test_service_moves_to_tac_after_intermediate_ph(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
 
     state = service.record_naoh_measurement(ph=6.0, tac_ppm=50.0)
@@ -36,7 +39,7 @@ def test_service_moves_to_tac_after_intermediate_ph(tmp_path) -> None:
 
 def test_service_rejects_tac_not_matching_the_test_resolution(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
 
     with pytest.raises(ValueError, match="pas de 10 ppm"):
@@ -45,7 +48,7 @@ def test_service_rejects_tac_not_matching_the_test_resolution(tmp_path) -> None:
 
 def test_stabilized_chlorine_context_is_journalized_and_warns_on_measurement(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     state = service.set_treatment(ElectrolysisStatus.STOPPED, DisinfectionMethod.STABILIZED_TABLETS)
     state = service.record_stabilized_tablets(2, 200.0, "galets 200 g")
     state = service.record_cyanuric_acid_measurement(55.0)
@@ -75,7 +78,7 @@ def test_legacy_treatment_context_migrates_to_one_active_disinfection_method() -
 
 def test_legacy_protocol_state_is_marked_with_the_current_schema_when_read(tmp_path) -> None:
     repository = JsonProtocolRepository(tmp_path)
-    created = ProtocolService(repository).start(ProtocolConfig())
+    created = ProtocolService(repository).start(ProtocolConfig(), treatment=declared_treatment())
     path = tmp_path / created.archive_name
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["version"] = 3
@@ -88,13 +91,13 @@ def test_legacy_protocol_state_is_marked_with_the_current_schema_when_read(tmp_p
     migrated = repository.active()
 
     assert migrated is not None
-    assert migrated.version == 6
+    assert migrated.version == 8
     assert migrated.treatment.disinfection_method is DisinfectionMethod.SALT_ELECTROLYSIS
 
 
 def test_supply_estimate_is_persisted_and_accounts_for_stabilized_tablets(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    state = service.start(ProtocolConfig())
+    state = service.start(ProtocolConfig(), treatment=declared_treatment())
 
     assert state.supply_estimate is not None
     assert state.supply_estimate.bicarbonate_theoretical_kg == pytest.approx(3.86, abs=0.01)
@@ -111,7 +114,7 @@ def test_supply_estimate_is_persisted_and_accounts_for_stabilized_tablets(tmp_pa
 def test_bicarbonate_is_prepared_and_recalculated_one_kg_at_a_time(tmp_path) -> None:
     repository = JsonProtocolRepository(tmp_path)
     service = ProtocolService(repository)
-    state = service.start(ProtocolConfig())
+    state = service.start(ProtocolConfig(), treatment=declared_treatment())
     state.step = ProtocolStep.TAC_TO_TARGET
     state.current_ph = 6.0
     state.current_tac_ppm = 30.0
@@ -136,16 +139,34 @@ def test_bicarbonate_is_prepared_and_recalculated_one_kg_at_a_time(tmp_path) -> 
 
 def test_start_reuses_existing_active_protocol(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    created = service.start(ProtocolConfig())
+    created = service.start(ProtocolConfig(), treatment=declared_treatment())
 
-    resumed = service.start(ProtocolConfig())
+    resumed = service.start(ProtocolConfig(), treatment=declared_treatment())
 
     assert resumed.archive_name == created.archive_name
 
 
+def test_guided_actions_follow_the_persisted_state_machine(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(ProtocolConfig(), treatment=declared_treatment())
+
+    assert service.guided_action(state).destination == "protocol"
+    assert service.guided_action(state).label == "Préparer le lot de soude"
+    assert service.guided_action(state).trigger == "prepare_naoh"
+
+    state, _ = service.prepare_naoh(250)
+    assert service.guided_action(state).destination == "measurements"
+    assert service.guided_action(state).label == "Saisir la mesure après NaOH"
+
+    state = service.record_naoh_measurement(ph=6.0, tac_ppm=50.0)
+    assert state.step is ProtocolStep.TAC_TO_TARGET
+    assert service.guided_action(state).destination == "tac"
+    assert service.guided_action(state).label == "Préparer un lot de bicarbonate"
+
+
 def test_naoh_concentration_can_be_corrected_for_an_active_protocol(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
     service.record_naoh_measurement(ph=5.0, tac_ppm=50.0)
 
@@ -165,7 +186,7 @@ def test_naoh_concentration_can_be_corrected_for_an_active_protocol(tmp_path) ->
 
 def test_naoh_concentration_cannot_change_while_a_dose_is_pending(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
 
     with pytest.raises(ValueError, match="dose de NaOH en attente"):
@@ -184,7 +205,7 @@ def test_repository_recreates_missing_data_directory(tmp_path) -> None:
 
 def test_cancel_pending_naoh_preserves_last_measurements(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    created = service.start(ProtocolConfig())
+    created = service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
 
     state = service.cancel_pending_naoh()
@@ -198,7 +219,7 @@ def test_cancel_pending_naoh_preserves_last_measurements(tmp_path) -> None:
 def test_cancel_protocol_archives_it_and_removes_it_from_active_state(tmp_path) -> None:
     repository = JsonProtocolRepository(tmp_path)
     service = ProtocolService(repository)
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
 
     cancelled = service.cancel_protocol()
 
@@ -208,7 +229,7 @@ def test_cancel_protocol_archives_it_and_removes_it_from_active_state(tmp_path) 
 
 def test_correct_last_measurement_restores_the_appropriate_step(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
-    service.start(ProtocolConfig())
+    service.start(ProtocolConfig(), treatment=declared_treatment())
     service.prepare_naoh(250)
     service.record_naoh_measurement(ph=6.0, tac_ppm=50.0)
 
@@ -258,7 +279,7 @@ def test_high_ph_monitoring_archives_low_chlorine_and_stopped_equipment(tmp_path
             free_chlorine_min_ppm=1.0,
             free_chlorine_max_ppm=4.0,
         ),
-        TreatmentContext(
+        declared_treatment(
             electrolysis_status=ElectrolysisStatus.STOPPED,
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             ph_regulator_status=PhRegulatorStatus.STOPPED,
@@ -278,9 +299,53 @@ def test_high_ph_monitoring_archives_low_chlorine_and_stopped_equipment(tmp_path
     assert any("Electrolyse arretee" in action for action in actions)
     assert any("Galets declares consommes" in action for action in actions)
     assert any("Conclusion de surveillance : Decision pH" in event.event for event in state.journal)
-    assert any("Conclusion de surveillance : Decision chlore" in event.event for event in state.journal)
+    assert any(
+        "Conclusion de surveillance : Decision chlore" in event.event for event in state.journal
+    )
     with pytest.raises(ValueError, match="soude n'est pas l'etape active"):
         service.prepare_naoh()
+
+
+def test_water_monitoring_accepts_targets_already_reached_and_optional_chlorine(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.WATER_MONITORING,
+            initial_ph=7.2,
+            target_ph=7.2,
+            initial_tac_ppm=80,
+            target_tac_ppm=80,
+        )
+    , treatment=declared_treatment())
+
+    state = service.record_water_measurement(ph=7.2, tac_ppm=80)
+
+    assert state.step is ProtocolStep.HIGH_PH_MONITORING
+    assert state.water_measurements[-1].free_chlorine_ppm is None
+    assert any("conforme" in action for action in service.water_actions(state))
+    action = service.guided_action(state)
+    assert action.trigger == "complete_water"
+    assert action.destination == "history"
+
+
+def test_water_monitoring_prioritizes_low_tac_before_a_ph_correction(tmp_path) -> None:
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.WATER_MONITORING,
+            initial_ph=6.8,
+            target_ph=7.2,
+            initial_tac_ppm=60,
+            target_tac_ppm=80,
+        )
+    , treatment=declared_treatment())
+    state = service.record_water_measurement(ph=6.8, tac_ppm=60)
+
+    action = service.guided_action(state)
+
+    assert action.trigger == "follow_up"
+    assert action.destination == "tac"
+    assert "TAC" in action.label
 
 
 def test_high_ph_monitoring_flags_chlorine_above_the_declared_maximum(tmp_path) -> None:
@@ -294,7 +359,7 @@ def test_high_ph_monitoring_flags_chlorine_above_the_declared_maximum(tmp_path) 
             free_chlorine_min_ppm=1.0,
             free_chlorine_max_ppm=4.0,
         ),
-        TreatmentContext(
+        declared_treatment(
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             stabilized_tablet_status=StabilizedTabletStatus.ACTIVE,
         ),
@@ -319,13 +384,101 @@ def test_high_ph_monitoring_records_when_measurements_need_no_correction(tmp_pat
             free_chlorine_min_ppm=1.0,
             free_chlorine_max_ppm=4.0,
         )
-    )
+    , treatment=declared_treatment())
 
     state = service.record_water_measurement(ph=7.2, tac_ppm=80, free_chlorine_ppm=3.0)
 
     conclusions = [event.event for event in state.journal if event.event.startswith("Conclusion")]
-    assert any("Aucune correction de pH n'est a effectuer" in conclusion for conclusion in conclusions)
-    assert any("Aucune action de desinfection n'est a effectuer" in conclusion for conclusion in conclusions)
+    assert any(
+        "Aucune correction de pH n'est a effectuer" in conclusion for conclusion in conclusions
+    )
+    assert any(
+        "Aucune action de desinfection n'est a effectuer" in conclusion
+        for conclusion in conclusions
+    )
+
+
+def test_sodium_carbonate_assessment_archives_product_and_never_creates_an_active_dose(
+    tmp_path,
+) -> None:
+    repository = JsonProtocolRepository(tmp_path)
+    service = ProtocolService(repository)
+    state = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.SODIUM_CARBONATE_ASSESSMENT,
+            initial_ph=6.8,
+            initial_tac_ppm=50,
+            sodium_carbonate_product=SodiumCarbonateProduct(
+                label="pH+ declare",
+                purity_percent=99.0,
+                purity_source=ProductDeclarationSource.SAFETY_DATA_SHEET,
+            ),
+        )
+    , treatment=declared_treatment())
+
+    assert state.step is ProtocolStep.COMPLETE
+    assert state.sodium_carbonate_assessment is not None
+    assert state.sodium_carbonate_assessment.product.alkaline_product.value == "na2co3"
+    assert (
+        state.sodium_carbonate_assessment.product.purity_source
+        is ProductDeclarationSource.SAFETY_DATA_SHEET
+    )
+    assert state.sodium_carbonate_assessment.can_be_considered is True
+    assert repository.active() is None
+    assert any("aucun lot Na2CO3" in event.event for event in state.journal)
+
+
+def test_sodium_carbonate_assessment_does_not_replace_an_active_protocol(tmp_path) -> None:
+    repository = JsonProtocolRepository(tmp_path)
+    service = ProtocolService(repository)
+    active = service.start(ProtocolConfig(), treatment=declared_treatment())
+
+    study = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.SODIUM_CARBONATE_ASSESSMENT,
+            initial_ph=6.8,
+            initial_tac_ppm=50,
+            sodium_carbonate_product=SodiumCarbonateProduct(
+                label="pH+ declare",
+                purity_percent=99.0,
+                purity_source=ProductDeclarationSource.LABEL,
+            ),
+        )
+    , treatment=declared_treatment())
+
+    assert study.step is ProtocolStep.COMPLETE
+    resumed = repository.active()
+    assert resumed is not None
+    assert resumed.archive_name == active.archive_name
+
+
+def test_follow_up_archive_keeps_an_explicit_link_to_its_terminal_parent(tmp_path) -> None:
+    repository = JsonProtocolRepository(tmp_path)
+    service = ProtocolService(repository)
+    parent = service.start(
+        ProtocolConfig(
+            mode=ProtocolMode.SODIUM_CARBONATE_ASSESSMENT,
+            initial_ph=6.8,
+            initial_tac_ppm=50,
+            sodium_carbonate_product=SodiumCarbonateProduct(
+                label="pH+ declare",
+                purity_percent=99.0,
+                purity_source=ProductDeclarationSource.LABEL,
+            ),
+        )
+    , treatment=declared_treatment())
+
+    child = service.start(
+        ProtocolConfig(mode=ProtocolMode.RAISE_TAC, initial_ph=6.8, initial_tac_ppm=50),
+        follow_up_from=parent.archive_name,
+     treatment=declared_treatment())
+
+    assert child.parent_archive_name == parent.archive_name
+    assert child.parent_protocol_id == parent.protocol_id
+    assert any(parent.archive_name in event.event for event in child.journal)
+    assert [state.archive_name for state in repository.successors(parent.archive_name)] == [
+        child.archive_name
+    ]
 
 
 def test_tac_only_protocol_starts_at_tac_and_ends_after_confirmation(tmp_path) -> None:
@@ -336,7 +489,7 @@ def test_tac_only_protocol_starts_at_tac_and_ends_after_confirmation(tmp_path) -
             initial_tac_ppm=60,
             target_tac_ppm=80,
         )
-    )
+    , treatment=declared_treatment())
 
     assert state.step is ProtocolStep.TAC_TO_TARGET
 
@@ -355,7 +508,7 @@ def test_lower_ph_protocol_reserves_water_measurements_for_the_acid_cycle(tmp_pa
             initial_ph=7.6,
             target_ph=7.2,
         )
-    )
+    , treatment=declared_treatment())
 
     with pytest.raises(ValueError, match="reservee aux protocoles de surveillance"):
         service.record_water_measurement(ph=7.6, tac_ppm=80)
@@ -365,7 +518,7 @@ def test_disinfection_protocol_requires_chlorine_and_warns_for_trichlor(tmp_path
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     state = service.start(
         ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
-        TreatmentContext(
+        declared_treatment(
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
         ),
@@ -389,7 +542,7 @@ def test_sulfuric_acid_protocol_limits_a_batch_and_requires_measurement(tmp_path
             target_ph=7.2,
             initial_tac_ppm=80,
         )
-    )
+    , treatment=declared_treatment())
 
     assert state.step is ProtocolStep.ACID_TO_TARGET
     with pytest.raises(ValueError, match="ne peut pas exceder"):
@@ -415,7 +568,7 @@ def test_lower_ph_protocol_never_requests_a_chlorine_measurement(tmp_path) -> No
             target_ph=7.2,
             initial_tac_ppm=80,
         )
-    )
+    , treatment=declared_treatment())
 
     assert not any("chlore libre" in action for action in service.water_actions(state))
 
@@ -428,14 +581,14 @@ def test_sulfuric_acid_is_blocked_by_an_active_regulator_or_active_tablets(tmp_p
         target_ph=7.2,
         initial_tac_ppm=80,
     )
-    service.start(config, TreatmentContext(ph_regulator_status=PhRegulatorStatus.RUNNING))
+    service.start(config, declared_treatment(ph_regulator_status=PhRegulatorStatus.RUNNING))
 
     with pytest.raises(ValueError, match="regulateur pH"):
         service.prepare_sulfuric_acid()
 
     service.start(
         config,
-        TreatmentContext(
+        declared_treatment(
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             stabilized_tablet_status=StabilizedTabletStatus.ACTIVE,
         ),
@@ -456,7 +609,7 @@ def test_last_acid_measurement_can_be_corrected_without_changing_the_dose(tmp_pa
             target_ph=7.2,
             initial_tac_ppm=80,
         )
-    )
+    , treatment=declared_treatment())
     service.prepare_sulfuric_acid()
     service.record_sulfuric_acid_measurement(ph=7.3, tac_ppm=80)
 
@@ -468,11 +621,13 @@ def test_last_acid_measurement_can_be_corrected_without_changing_the_dose(tmp_pa
     assert state.cumulative_additions.sulfuric_acid_15_ml == pytest.approx(150)
 
 
-def test_tablet_guidance_uses_the_slow_trichlor_label_after_low_chlorine_measurement(tmp_path) -> None:
+def test_tablet_guidance_uses_the_slow_trichlor_label_after_low_chlorine_measurement(
+    tmp_path,
+) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     service.start(
         ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING, pool_volume_m3=46),
-        TreatmentContext(
+        declared_treatment(
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
         ),
@@ -490,7 +645,7 @@ def test_tablet_guidance_refuses_a_high_cya(tmp_path) -> None:
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     service.start(
         ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
-        TreatmentContext(
+        declared_treatment(
             disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
             stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
         ),
@@ -500,3 +655,75 @@ def test_tablet_guidance_refuses_a_high_cya(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="CYA a 50 ppm"):
         service.tablet_guidance()
+
+
+@pytest.mark.parametrize("chlorine", [0.2, 2.5, 6.0])
+def test_disinfection_reviews_saved_measurements_and_closes_only_on_request(tmp_path, chlorine):
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    state = service.start(ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING), treatment=declared_treatment())
+    assert service.guided_action(state).destination == "measurements"
+    with pytest.raises(ValueError, match="au moins une mesure"):
+        service.complete_disinfection_monitoring()
+    state = service.record_water_measurement(7.2, 80, chlorine)
+    assert service.guided_action(state).destination == "treatment"
+    assert state.step is ProtocolStep.HIGH_PH_MONITORING
+    completed = service.complete_disinfection_monitoring()
+    assert completed.step is ProtocolStep.COMPLETE
+    assert service.repository.active() is None
+    saved = service.repository.archive(completed.archive_name)
+    assert saved.water_measurements[-1].free_chlorine_ppm == chlorine
+    assert "ne vaut pas validation" in saved.journal[-1].event
+
+
+def test_disinfection_completion_cannot_close_a_correction(tmp_path):
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig(), treatment=declared_treatment())
+    with pytest.raises(ValueError, match="Seul un suivi"):
+        service.complete_disinfection_monitoring()
+    assert service.repository.active() is not None
+
+
+@pytest.mark.parametrize("mode", list(ProtocolMode))
+def test_every_protocol_requires_a_declared_context_before_creating_an_archive(tmp_path, mode):
+    values = {}
+    if mode in {ProtocolMode.LOWER_PH_MONITORING, ProtocolMode.HIGH_PH_MONITORING}:
+        values["initial_ph"] = 7.4
+    if mode is ProtocolMode.SODIUM_CARBONATE_ASSESSMENT:
+        values["sodium_carbonate_product"] = {
+            "label": "Produit test", "purity_percent": 99, "purity_source": "fds",
+        }
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    config = ProtocolConfig(mode=mode, **values)
+    with pytest.raises(ValueError, match="Déclarez d’abord"):
+        service.start(config)
+    assert service.repository.archives() == []
+    saved = service.start(config, declared_treatment())
+    assert saved.treatment == declared_treatment()
+
+
+@pytest.mark.parametrize("field", ["disinfection_method", "electrolysis_status",
+                                   "ph_regulator_status", "stabilized_tablet_status"])
+def test_each_missing_context_field_prevents_start(tmp_path, field):
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    with pytest.raises(ValueError, match="Déclarez d’abord"):
+        service.start(ProtocolConfig(), declared_treatment(**{field: "inconnu"}))
+    assert service.repository.archives() == []
+
+
+def test_follow_up_inherits_context_and_preserves_parent_when_child_changes(tmp_path):
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    context = declared_treatment(
+        disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+        stabilized_tablet_status=StabilizedTabletStatus.ACTIVE,
+        stabilized_tablet_product=StabilizedTabletProduct.TRICHLOR_SLOW_GCCHLLEC,
+    )
+    parent = service.start(ProtocolConfig(mode=ProtocolMode.WATER_MONITORING), context)
+    service.record_water_measurement(7.2, 80, 2)
+    service.complete_water_monitoring()
+    child = service.start(ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
+                          follow_up_from=parent.archive_name)
+    assert child.treatment == context
+    assert any("Contexte de traitement repris" in entry.event for entry in child.journal)
+    service.set_treatment(ElectrolysisStatus.NOT_INSTALLED, DisinfectionMethod.STABILIZED_TABLETS,
+                          PhRegulatorStatus.NOT_INSTALLED, StabilizedTabletStatus.PAUSED)
+    assert service.repository.archive(parent.archive_name).treatment == context

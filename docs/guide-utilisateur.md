@@ -3,6 +3,8 @@
 Ce guide explique comment suivre une correction de pH et de TAC avec l'application `piscine-ph`.
 
 Pour comprendre les notions de pH, TAC, bicarbonate, CO2 et soude avant de commencer, consulter le [guide de chimie](comprendre-la-chimie.md).
+Pour choisir entre les parcours et comprendre chaque valeur demandée, consulter le [guide de choix des protocoles](choisir-un-protocole.md).
+Avant de déclarer une concentration ou une pureté depuis une FDS, suivre le [guide de recherche et de lecture des FDS](rechercher-une-fds.md). Cette recherche est entièrement manuelle : l’application n’utilise aucune IA pour retrouver ou interpréter les documents.
 
 ## Avant de commencer
 
@@ -29,7 +31,7 @@ Le projet demande Python 3.11 ou plus récent et l'outil `uv`. Même si Python n
 Ouvrir **Terminal**, puis exécuter une seule commande :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.5/install.sh | sh
 ```
 
 Elle installe `uv` et Python si nécessaire, puis `piscine-ph`. Si `uv` vient d'être installé, fermer puis rouvrir le terminal. Démarrer ensuite l'application depuis n'importe quel dossier :
@@ -43,7 +45,7 @@ piscine-ph start
 Ouvrir **PowerShell**, puis exécuter une seule commande :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.4/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.5/install.ps1 | iex
 ```
 
 Elle installe `uv`, puis Python 3.11 même si un Python plus ancien est déjà présent, et enfin `piscine-ph`. Windows 10 et 11 incluent déjà Windows PowerShell ; Git n'est pas nécessaire, car l'application est téléchargée depuis l'archive de la version publiée. Si `uv` vient d'être installé, fermer puis rouvrir PowerShell. Démarrer ensuite l'application :
@@ -63,7 +65,7 @@ piscine-ph start
 - Erreur d'autorisation : ne pas utiliser `sudo` pour ce projet. Installer sous le compte utilisateur ou demander l'aide de l'administrateur de l'ordinateur.
 - L'application ne nécessite pas de dossier de projet local.
 
-L'installation est liée à la version `v0.2.4`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
+L'installation est liée à la version `v0.2.5`. Pour une mise à jour, reprendre la commande fournie dans la [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases) de la version voulue ; elle utilisera un tag précis.
 
 ## Modifier les valeurs proposées par défaut
 
@@ -71,9 +73,37 @@ Les valeurs proposées au démarrage servent seulement de repères. À la créat
 
 Pour une exécution sans questionnaire, les options de `start`, comme `--volume-m3 46`, remplacent les valeurs proposées. Les réglages internes fournis avec l'application sont documentés dans la [documentation de configuration](configuration.md) et concernent le développement du projet.
 
-Si un protocole est actif, `start` le reprend et n'applique donc pas de nouveaux paramètres. Terminer ou annuler le protocole actif, puis lancer `start` ; ou utiliser explicitement `piscine-ph start --force` pour créer une nouvelle archive sans supprimer l'ancienne.
+Si un protocole est actif, `start` le reprend et n'applique donc pas de nouveaux paramètres. Terminer ou annuler le protocole actif, puis lancer `start` ; ou utiliser explicitement `piscine-ph start --force` pour créer une nouvelle archive sans supprimer l'ancienne. Pour faire suivre une archive terminée ou annulée par un autre parcours, dans la TUI choisir l’archive puis **Enchaîner depuis cette archive** ; en CLI, ajouter `--follow-up-from NOM_ARCHIVE` à `start`. La nouvelle archive enregistre son parent et propose ses dernières mesures, qui doivent toujours être refaites dans le bassin.
 
 ## Démarrer un protocole
+
+La **déclaration de l'installation précède tout nouveau protocole**, y compris
+Mesurer l'eau, les corrections pH/TAC et l'étude carbonate. Les quatre paramètres
+doivent être connus : source de désinfection, état de l'électrolyseur, état du
+régulateur pH et état des galets. Choisir **aucune** ou **non installé** lorsque
+c'est le cas ; **non renseigné** n'autorise pas la création d'une archive.
+
+Dans le TUI, choisir un parcours avec un contexte incomplet ouvre d'abord la
+section **1. Déclarer la désinfection et les appareils**. Renseigner puis
+**Enregistrer le contexte** permet de reprendre le parcours choisi. Avant la
+création, ces valeurs sont préparées dans le formulaire ; elles sont archivées
+avec le protocole au démarrage. Un contexte complet repris du parcours précédent
+reste affiché et peut être corrigé après vérification des appareils.
+
+Pour reprendre un contexte ancien : **Archives → sélectionner l'archive →
+Reprendre ce contexte de traitement…**, vérifier les valeurs, puis enregistrer.
+Cette reprise seule ne modifie pas le suivi actif. Les archives anciennes qui
+contiennent des valeurs inconnues restent lisibles et le guidage demande de
+compléter le contexte.
+
+En CLI, le questionnaire demande désormais l'installation en premier. Avec
+`--no-guided`, fournir les quatre options, sauf si un contexte complet est repris
+par `--follow-up-from`. Exemple de déclaration à adapter à l'installation réelle :
+
+```bash
+--disinfection chlore_non_stabilise --electrolysis non_installe \
+--ph-regulator non_installe --tablets non_necessaires
+```
 
 Pour utiliser les valeurs prévues pour le bassin de 46 m3 :
 
@@ -88,6 +118,37 @@ Pour la soude, le questionnaire ne demande jamais le poids total du bidon : ce p
 - concentration indiquée directement en `g/L` ;
 - `% m/m` et densité en `g/mL` : `g/L = % × densité × 10` ; par exemple 30 % m/m à 1,33 g/mL donne 399 g/L ;
 - `% m/v` : `g/L = % × 10` ; par exemple 30 % m/v donne 300 g/L.
+
+## Étudier un pH+ au carbonate de sodium
+
+Le choix « Étude carbonate pH+ » archive le libellé du produit `Na2CO3`, sa
+pureté et sa source (étiquette ou FDS), puis compare les mesures pH/TAC à la
+cible. Il peut écarter le carbonate lorsque le pH ou le TAC est déjà à la cible.
+Lorsque pH et TAC sont tous deux bas, il affiche uniquement le plafond
+théorique imposé par le TAC et le pH que le modèle fermé associe à ce plafond.
+
+Ce plafond n’est **ni une dose ni un lot** : le programme ne crée aucune
+instruction de versement de carbonate. Les échanges de CO2, la dureté et les
+autres tampons réels du bassin peuvent rendre la prévision de pH inexacte. Le
+carbonate ne remplace donc pas automatiquement la soude et le bicarbonate.
+
+Pour une étude non interactive, fournissez explicitement le produit et sa
+pureté, sans en supposer une valeur :
+
+```bash
+piscine-ph start --no-guided --mode etude_carbonate_sodium \
+  --initial-ph 6.8 --initial-tac 50 --target-ph 7.2 --target-tac 80 \
+  --carbonate-product-label "pH+ de l'etiquette" \
+  --carbonate-purity-percent 99 --carbonate-purity-source fds --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
+```
+
+L’étude est archivée dans l’historique et se termine immédiatement, sans
+interrompre un protocole actif. Les précautions de la FDS restent applicables :
+le carbonate est alcalin et ne doit pas être mélangé à d’autres produits.
+
+La même étude est disponible dans le TUI : onglet **Corriger le pH**, puis « Étude
+pH+ carbonate (sans dose) ». Le formulaire affiche le résultat et les alertes
+dans l’onglet ; l’archive JSON est ensuite consultable dans **Archives**.
 
 La concentration ne possède pas de réponse par défaut dans le questionnaire : elle doit être saisie depuis l'étiquette ou la FDS. Le programme rappelle à l'écran les exemples `300 g/L`, `30 % m/m` avec une densité de `1,33 g/mL` (soit `399 g/L`) et `30 % m/v` (soit `300 g/L`). Ces exemples servent à reconnaître l'unité ; ils ne doivent pas être repris si l'étiquette indique autre chose. En cas d'unité ou de densité absente, arrêter le questionnaire et consulter la FDS du produit. Les réponses sont figées dans l'archive, notamment `config.naoh_concentration_g_l` et son origine. Cela évite de confondre une soude à 30 % massique avec une solution à 300 g/L.
 
@@ -116,7 +177,7 @@ Le test TAC utilisé ici se lit par paliers de 10 ppm. Saisir uniquement des val
 Pour une exécution automatisée ou sans questionnaire, utiliser `--no-guided` et fournir explicitement les paramètres, en particulier la concentration de soude :
 
 ```bash
-piscine-ph start --no-guided --volume-m3 46 --initial-ph 4.0 --initial-tac 30 --bucket-l 10 --naoh-g-l 400
+piscine-ph start --no-guided --volume-m3 46 --initial-ph 4.0 --initial-tac 30 --bucket-l 10 --naoh-g-l 400 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
 ```
 
 Le programme crée un fichier de suivi daté dans `data/protocoles/`. Il conserve les mesures et reprend automatiquement le dernier protocole non terminé.
@@ -189,6 +250,10 @@ la notice : 75 mL pour 10 m³ et une baisse de 0,1 pH. Elle limite donc chaque
 lot à 0,1 pH, même si l'écart à la cible est supérieur. Mettre la filtration en
 marche, répartir l'acide comme l'indique l'étiquette, attendre l'homogénéisation
 puis mesurer à nouveau dans le bassin :
+
+Dans la TUI, le volume est calculé automatiquement : aucun champ « volume
+d’acide » ne doit être renseigné. La commande CLI normale est également
+`piscine-ph dose-acid`, sans option de volume.
 
 ```bash
 piscine-ph measure-acid --ph 7.40 --tac 80
@@ -356,19 +421,77 @@ aux opérations courantes :
 piscine-ph tui
 ```
 
-La barre de menus en haut donne accès à **Accueil**, **Protocole**,
-**Mesures**, **Traitement**, **Archives** et **Aide**. L'item actif est mis en
+La barre de menus en haut donne accès à **Accueil**, au menu déroulant
+**Protocoles**, à **Archives** et à **Aide**. **Accueil** ouvre l’**Assistant
+guidé**, le mode par défaut : il affiche une seule prochaine action, ouvre
+l’écran correspondant après **Continuer** et revient à l’assistant après chaque
+étape enregistrée. Il ne verse ni ne confirme jamais un produit à votre place :
+après un lot préparé, il rappelle l’ajout conforme à l’étiquette/FDS, la
+filtration et la nouvelle mesure obligatoire.
+
+Lorsqu’un bouton de l’Assistant dit **Préparer le lot d’acide** ou **Préparer
+le lot de soude**, il exécute réellement la préparation enregistrée, jamais le
+versement. Les boutons qui demandent une mesure ou un TAC ouvrent au contraire
+le formulaire de saisie, car ces valeurs doivent venir du test réalisé dans le
+bassin.
+
+Les passages sont déterminés par l’état archivé : un lot en attente impose une
+mesure ou une annulation ; un pH/TAC hors cible mène à son unique étape de
+correction ; une surveillance mène à la mesure d’eau. Il est donc impossible
+pour l’assistant de proposer un nouveau lot tant que le précédent n’est pas
+confirmé ou annulé.
+
+Après un relevé **Mesurer l’eau**, l’Assistant affiche une décision explicite
+fondée sur les références et bornes archivées : priorité au TAC bas, puis au
+pH, puis au chlore hors bornes. Les règles et leurs limites sont détaillées dans
+le [guide de choix des protocoles](choisir-un-protocole.md#1-mesurer-leau).
+
+Cocher **Mode manuel** dans l’Assistant guidé désactive seulement le retour
+automatique à cet écran. Le menu **Protocoles** reste alors disponible pour
+accéder directement aux parcours. Le menu **Protocoles** contient
+**Mesurer l’eau**, **Corriger le pH**, **Corriger le TAC** et **Gérer la
+désinfection** ; les mêmes raccourcis sont aussi proposés depuis l’accueil.
+L'item actif est mis en
 évidence et chaque page défile indépendamment. Les actions d'une page sont
 regroupées dans des items dépliables : aucun champ prérempli n'est affiché sans
 son libellé. `⌘R` sur macOS (`Ctrl+R` sur les autres systèmes) actualise
 l'affichage, et `q` quitte l'application ; `⌘↓` et `⌘↑` sur macOS (`Ctrl+↓` et
 `Ctrl+↑` sur les autres systèmes) font défiler la page
-active. Le menu **Protocole** couvre `start`, `configure-naoh`, `dose`,
-`plan-tac`, les annulations et la correction de mesure. Le menu **Mesures** enregistre les
-mesures attendues par le protocole actif : après une dose de soude ou de
-bicarbonate dans un parcours pH bas, il demande pH et TAC ; pour la
-surveillance pH haut, il demande aussi le chlore libre. L'onglet
-**Traitement** ne pilote aucun appareil : il distingue la **désinfection
+active. Le menu **Corriger le pH** couvre `start`, `configure-naoh`, `dose`,
+`dose-acid`, leurs annulations et la correction de mesure. Le menu **Corriger
+le TAC** ouvre la hausse au bicarbonate et prépare ses lots limités. Le menu
+**Mesurer l’eau** n’affiche qu’une action à la fois. Sans protocole actif,
+**Nouveau relevé d’eau** sert à relever puis enregistrer les valeurs initiales
+du bassin : pH, TAC et, si disponible, chlore libre. Une fois ce relevé créé,
+ce premier formulaire disparaît : la zone devient une **mesure de suivi** ou
+une **mesure de confirmation**, avec le contexte explicite (après soude, acide
+ou bicarbonate). Il ne faut donc pas confondre « premier relevé » et « ajouter
+une mesure » : la seconde action n’est disponible que lorsqu’un relevé ou un
+protocole est déjà en cours. Après une dose de soude ou de bicarbonate dans un
+parcours pH bas, l’application demande pH et TAC ; pour la surveillance pH
+haut, elle demande aussi le chlore libre. L'onglet
+Après une mesure de désinfection, la TUI affiche le **bilan du suivi**, avec les
+dernières valeurs pH/TAC/chlore, les valeurs initiales et les seuils min/max
+enregistrés. Elle ne demande pas de ressaisir immédiatement la même mesure.
+**Ajouter une nouvelle mesure** ouvre le formulaire pour le prochain contrôle ;
+**Mesurer l’eau → Mesures déjà enregistrées** permet de relire les relevés datés.
+Le formulaire de création de désinfection est masqué tant que ce suivi est actif.
+
+**Terminer ce suivi et choisir la suite** clôture explicitement le suivi après
+au moins une mesure, sans déclarer l'eau conforme. Les données restent dans
+**Archives** et le parcours suivant est lié au suivi terminé. Les dernières
+valeurs pH/TAC et les seuils min/max sont préremplis pour vérification.
+Les raccourcis de l'accueil restent accessibles pendant un suivi actif.
+
+Les données sont sauvegardées dans `data/protocoles/protocole_*.json`, relatif
+au dossier de lancement. Le chemin absolu apparaît dans le bilan et dans les
+archives : relancer depuis le même dossier permet de retrouver les mêmes suivis.
+Les valeurs initiales et les seuils sont dans `config`, les dernières valeurs
+dans `current_ph` et `current_tac_ppm`, et les relevés datés dans `water_measurements`.
+Dans **Archives**, sélectionner une ligne ou une archive affiche ses paramètres
+et permet de déplier **Toutes les mesures de cette archive**, sans lire le JSON.
+
+**Gérer la désinfection** ne pilote aucun appareil : il distingue la **désinfection
 active** (une seule source) de l'état de l'électrolyseur au sel, du doseur de
 galets stabilisés et du régulateur pH.
 

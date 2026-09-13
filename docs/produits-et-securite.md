@@ -6,6 +6,10 @@ décrit les dangers, la manipulation, le stockage et l'élimination ; elle ne
 remplace pas l'étiquette d'emploi et ne donne pas à l'application le droit de
 calculer une dose.
 
+Pour retrouver et contrôler une FDS avant de l’utiliser, suivre le [guide de
+recherche et de lecture des FDS](rechercher-une-fds.md). La récupération et la
+lecture sont manuelles : l'application ne télécharge ni n'interprète une FDS.
+
 ## Informations provenant des FDS fournies
 
 ### Correcteur pH-

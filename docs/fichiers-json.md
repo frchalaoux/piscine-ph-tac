@@ -53,14 +53,16 @@ Chaque fichier `protocole_*.json` représente un seul protocole. Les dates sont 
 
 | Champ | Type | Signification |
 | --- | --- | --- |
-| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 6 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
+| `version` | entier | Version du schéma d’archive. Les nouvelles archives emploient actuellement la version 8 ; une archive plus ancienne reste lisible grâce aux valeurs par défaut et aux migrations ciblées. |
 | `protocol_id` | texte | Identifiant de création. Les archives migrées commencent par `legacy:`. |
 | `created_at`, `updated_at` | date ISO 8601 | Création et dernière mutation du protocole. |
 | `archive_name` | texte | Nom de ce fichier dans `data/protocoles`. |
+| `parent_archive_name`, `parent_protocol_id` | texte ou `null` | Archive et identifiant du protocole précédent lorsqu’un parcours a été explicitement enchaîné. Les valeurs préremplies restent à confirmer par une mesure dans le bassin. |
 | `config` | objet | Photographie des paramètres de bassin et de soude utilisés pour les calculs. |
 | `step` | énumération | Étape courante : `naoh_vers_palier`, `tac_vers_80`, `naoh_final`, `acide_vers_cible`, `surveillance_ph_haut`, `termine` ou `annule`. |
 | `current_ph`, `current_tac_ppm` | nombre | Dernières mesures confirmées utilisées par le workflow. |
 | `initial_coherence` | objet ou `null` | Contrôle du modèle carbonate sur les valeurs de départ. |
+| `sodium_carbonate_assessment` | objet ou `null` | Étude terminale d’un produit `Na2CO3` déclaré : mesures, pureté, plafond TAC théorique et alertes ; elle ne contient aucune dose préparée ou versée. |
 
 `config` contient les mêmes champs que `defaults.json.protocol`. Ne modifiez pas directement le JSON : changer le volume ou l’objectif compromettrait la traçabilité des doses. La seule correction prévue par l'application est `configure-naoh`, qui met à jour de manière journalisée la concentration d'un même produit et recalcule le cumul des apports NaOH déjà confirmés.
 
@@ -71,22 +73,31 @@ Pour les archives créées avec le questionnaire, `config` contient aussi `naoh_
 ```json
 "treatment": {
   "electrolysis_status": "arretee",
-  "disinfection_method": "galets_stabilises"
+  "disinfection_method": "galets_stabilises",
+  "ph_regulator_status": "arrete",
+  "stabilized_tablet_status": "en_place"
 }
 ```
 
 | Champ | Valeurs possibles | Effet |
 | --- | --- | --- |
-| `treatment.electrolysis_status` | `inconnu`, `en_marche`, `arretee` | Contextualise les alertes sur la tendance du pH. |
-| `treatment.disinfection_method` | `inconnu`, `electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | Source active unique de désinfection ; les deux valeurs stabilisées activent les avertissements CYA. |
+| `treatment.electrolysis_status` | `inconnu`, `en_marche`, `arretee`, `non_installe` | Contextualise les alertes sur la tendance du pH. |
+| `treatment.disinfection_method` | `inconnu`, `aucune`, `electrolyse_au_sel`, `galets_stabilises`, `dichlore_stabilise`, `chlore_non_stabilise` | Source active unique de désinfection ; les deux valeurs stabilisées activent les avertissements CYA. |
+| `treatment.ph_regulator_status` | `inconnu`, `en_marche`, `arrete`, `non_installe` | État déclaré du régulateur pH. |
+| `treatment.stabilized_tablet_status` | `inconnu`, `en_place`, `consommes`, `suspendus`, `non_necessaires` | État déclaré des galets. |
 | `treatment.stabilized_tablet_product` | `inconnu`, `trichlore_multifonctions_gcchl4ec`, `trichlore_lent_gcchllec` | Profil FDS facultatif du galet réellement utilisé. Il affiche les incompatibilités et peut fournir une charge initiale issue d'un ratio d'étiquette confirmé. |
 | `stabilized_tablets` | liste | Ajouts de galets déclarés : `count`, `unit_mass_g` éventuel, `product_label`, `recorded_at`. Le nombre de galets ne sert pas à calculer le CYA. |
 | `cyanuric_acid_measurements` | liste | Mesures CYA réelles : `cya_ppm` et `recorded_at`. |
 | `water_measurements` | liste | Mesures sans ajout de produit des parcours de surveillance : `ph`, `tac_ppm`, `free_chlorine_ppm` facultatif hors désinfectant, date. |
 
+Les archives anciennes avec `inconnu` restent lisibles. La création d'un nouveau
+protocole exige désormais les quatre paramètres renseignés ; le profil produit
+de galets reste facultatif. Un enchaînement reprend le contexte parent sauf
+déclaration explicite d'un nouveau contexte, et journalise cette reprise.
+
 Les modes archivés sont `correction_hausse_ph_tac`, `correction_hausse_tac`,
 `correction_baisse_ph`, `surveillance_desinfectant` et le mode historique
-`surveillance_ph_haut`. Pour la surveillance désinfectant, les bornes lues sur
+`surveillance_ph_haut`, `surveillance_eau` et `etude_carbonate_sodium`. Pour la surveillance désinfectant, les bornes lues sur
 l'étiquette sont archivées sous `free_chlorine_min_ppm` et
 `free_chlorine_max_ppm`. Le parcours pH bas prépare un lot d'acide selon le
 ratio archivé du produit, limité à 0,1 pH et confirmé par mesure. Le parcours
@@ -98,7 +109,14 @@ Les archives antérieures à la version 6 peuvent contenir
 `chlore_non_stabilise` accompagné d'un état d'électrolyse connu devient
 `electrolyse_au_sel` ; les autres valeurs sont conservées comme source active.
 Lorsqu'une telle archive est enregistrée de nouveau, son numéro de schéma est
-porté à 6.
+porté à 7.
+
+Pour `etude_carbonate_sodium`, `config.sodium_carbonate_product` archive le
+produit sous la forme `{ "alkaline_product": "na2co3", "label": "…",
+"purity_percent": …, "purity_source": "etiquette" | "fds" }`. Le plafond
+`tac_limited_product_kg` du résultat d’étude est une borne mathématique liée au
+TAC, jamais une dose à verser. L’archive est directement terminale (`step:
+termine`) afin de ne pas bloquer un protocole de correction en cours.
 
 ### Plan d’approvisionnement
 
