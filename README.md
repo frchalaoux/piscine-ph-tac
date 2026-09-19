@@ -12,13 +12,13 @@ L'application enregistre les mesures et les ajouts confirmés. Elle ne verse auc
 Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'application :
 
 ```bash
-curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.6/install.sh | sh
+curl -LsSf https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.7/install.sh | sh
 ```
 
 Sous Windows 10 ou 11, ouvrir Windows PowerShell et exécuter (Git n'est pas nécessaire) :
 
 ```powershell
-irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.6/install.ps1 | iex
+irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.7/install.ps1 | iex
 ```
 
 Après une première installation de `uv`, rouvrir le terminal avant de lancer `piscine-ph`.
@@ -74,4 +74,4 @@ La [documentation technique](docs/protocole_ph_tac.md) décrit les calculs et le
 
 ## Mises à jour
 
-L'installation est figée sur la version `v0.2.6`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.
+L'installation est figée sur la version `v0.2.7`. Pour installer une version ultérieure, reprendre la commande d'installation indiquée dans sa [release GitHub](https://github.com/frchalaoux/piscine-ph-tac/releases), qui utilisera son tag exact.
