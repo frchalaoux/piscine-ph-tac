@@ -27,6 +27,7 @@ piscine-ph menu
 Le suivi est stocke dans `data/protocoles/` : chaque protocole est archive dans son propre fichier JSON date.
 
 Voir le [guide utilisateur](docs/guide-utilisateur.md) pour l'utilisation pas a pas, la [documentation technique](docs/protocole_ph_tac.md) pour les calculs et limites scientifiques, et le [guide développeur](docs/guide-developpeur.md) pour l'architecture et la maintenance.
+Le [sommaire général de la documentation](DOCUMENTATION.md) présente tous les documents du dossier `docs/` avec des liens HTTP et un résumé de chacun.
 Le rôle de chaque parcours, ses valeurs et son bon moment d'utilisation sont décrits dans le [guide de choix des protocoles](docs/choisir-un-protocole.md).
 Les paramètres par défaut versionnés sont décrits dans la [documentation de configuration](docs/configuration.md).
 La structure et la lecture des paramètres et archives sont détaillées dans la [référence des fichiers JSON](docs/fichiers-json.md).
