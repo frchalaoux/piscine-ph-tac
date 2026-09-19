@@ -854,6 +854,68 @@ def test_tui_disinfection_bilan_measurement_history_and_follow_up_survive_restar
     assert saved.current_ph == 7.1
 
 
+def test_tui_disinfection_highlights_recharge_then_requests_a_new_measurement(tmp_path):
+    from piscine_ph.models import DisinfectionMethod, StabilizedTabletStatus
+
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
+                  treatment=declared_treatment(
+                      disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+                      stabilized_tablet_status=StabilizedTabletStatus.CONSUMED))
+    service.record_water_measurement(7.3, 80, 0.5)
+    service.record_cyanuric_acid_measurement(20)
+
+    async def scenario():
+        app = PiscinePhTui(tmp_path)
+        async with app.run_test(size=(100, 40)) as pilot:
+            app._continue_guided()
+            await pilot.pause()
+            title = app.query_one("#disinfection-action-title", Static)
+            assert "Chlore trop bas" in str(title.render())
+            assert title.region.y < 10
+            assert "0.5 ppm" in str(app.query_one("#disinfection-action-detail", Static).render())
+            await pilot.click("#open-tablet-recharge")
+            await pilot.pause()
+            assert app.focused is app.query_one("#tablets-count", Input)
+            app.query_one("#tablets-count", Input).value = "2"
+            await pilot.click("#record-tablets")
+            await pilot.pause()
+            assert "Recharge enregistrée" in str(title.render())
+            assert "2 galet(s)" in str(app.query_one("#disinfection-action-detail", Static).render())
+            assert not app.query_one("#open-tablet-recharge").display
+            app.query_one("#disinfection-next-measurement").scroll_visible(animate=False)
+            await pilot.pause()
+            await pilot.click("#disinfection-next-measurement")
+            await pilot.pause()
+            assert app.query_one(TabbedContent).active == "measurements"
+            assert app.focused is app.query_one("#measurement-ph", Input)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("chlorine,cya,status,expected", [
+    (0.5, 50, "consommes", "ne pas ajouter de galets stabilisés"),
+    (0.5, 20, "en_place", "Des galets sont déjà en place"),
+    (2, 20, "consommes", "Aucune recharge"),
+    (5, 20, "consommes", "ne pas ajouter de chlore"),
+])
+def test_disinfection_decision_does_not_propose_an_inappropriate_recharge(
+    tmp_path, chlorine, cya, status, expected,
+):
+    from piscine_ph.models import DisinfectionMethod, StabilizedTabletStatus
+
+    service = ProtocolService(JsonProtocolRepository(tmp_path))
+    service.start(ProtocolConfig(mode=ProtocolMode.DISINFECTION_MONITORING),
+                  treatment=declared_treatment(
+                      disinfection_method=DisinfectionMethod.STABILIZED_TABLETS,
+                      stabilized_tablet_status=StabilizedTabletStatus(status)))
+    service.record_water_measurement(7.3, 80, chlorine)
+    service.record_cyanuric_acid_measurement(cya)
+    action = service.disinfection_action(service.active())
+    assert expected in action.label + action.instruction
+    assert action.trigger != "record_tablets"
+
+
 def test_tui_reads_an_archive_with_unmeasured_chlorine(tmp_path):
     service = ProtocolService(JsonProtocolRepository(tmp_path))
     service.start(ProtocolConfig(mode=ProtocolMode.WATER_MONITORING), treatment=declared_treatment())

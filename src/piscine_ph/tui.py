@@ -231,6 +231,9 @@ class PiscinePhTui(App[None]):
         height: auto;
         padding: 1 2;
     }
+    #history-content { width: 100%; }
+    #disinfection-action { height: auto; border: thick $warning; padding: 1 2; margin-bottom: 1; }
+    #disinfection-action-title { text-style: bold underline; color: $warning; margin-bottom: 1; }
     #protocol-form { padding-bottom: 3; }
     .field { height: auto; }
     #protocol-form .field-label { margin-top: 0; }
@@ -634,6 +637,13 @@ class PiscinePhTui(App[None]):
                 Container(id="treatment-form"),
             ):
                 yield Static("Gérer la désinfection", classes="page-title")
+                with Container(id="disinfection-action"):
+                    yield Static("", id="disinfection-action-title", markup=False)
+                    yield Static("", id="disinfection-action-detail", markup=False)
+                    yield Button("Enregistrer ma recharge de galets", id="open-tablet-recharge",
+                                 variant="warning")
+                    yield Button("Saisir le prochain contrôle", id="disinfection-next-measurement",
+                                 variant="primary")
                 with CopyableCollapsible(
                     title="1. Déclarer la désinfection et les appareils", collapsed=False,
                     id="treatment-context-section",
@@ -702,7 +712,8 @@ class PiscinePhTui(App[None]):
                     )
                     yield Button("Démarrer la gestion de la désinfection", id="start-disinfection")
                 with CopyableCollapsible(
-                    title="3. Journaliser une recharge de galets (`record-tablets`)"
+                    title="3. Journaliser une recharge de galets (`record-tablets`)",
+                    id="tablet-recharge-section",
                 ):
                     yield Static(
                         "Journal uniquement : il ne calcule pas le CYA.",
@@ -1011,6 +1022,7 @@ class PiscinePhTui(App[None]):
         chlorine_input = self.query_one("#measurement-chlorine", Input)
         chlorine_field = self.query_one(".chlorine-measurement-field", Container)
         cancel_button = self.query_one("#cancel-protocol", Button)
+        self.query_one("#disinfection-action").display = False
         for selector in ("#measurement-summary", "#measurement-log", "#treatment-summary",
                          "#treatment-measurements", "#treatment-view-json", "#complete-disinfection"):
             self.query_one(selector).display = False
@@ -1051,6 +1063,12 @@ class PiscinePhTui(App[None]):
             + "\n".join(self.protocol_service.water_actions(state))
         )
         is_disinfection = state.config.mode is ProtocolMode.DISINFECTION_MONITORING
+        self.query_one("#disinfection-action").display = is_disinfection
+        if is_disinfection:
+            decision = self.protocol_service.disinfection_action(state)
+            self.query_one("#disinfection-action-title", Static).update(decision.label)
+            self.query_one("#disinfection-action-detail", Static).update(decision.instruction)
+            self.query_one("#open-tablet-recharge").display = decision.trigger == "record_tablets"
         self.query_one("#disinfection-start-section").display = not is_disinfection
         self.query_one("#complete-disinfection").display = is_disinfection
         self.query_one("#complete-disinfection", Button).disabled = not state.water_measurements
@@ -1262,6 +1280,12 @@ class PiscinePhTui(App[None]):
                 self._show_active_json()
             case "treatment-view-json":
                 self._show_active_json()
+            case "open-tablet-recharge":
+                self.query_one("#tablet-recharge-section", CopyableCollapsible).collapsed = False
+                self.call_after_refresh(self.query_one("#tablets-count", Input).focus)
+            case "disinfection-next-measurement":
+                self._open_page("measurements")
+                self.call_after_refresh(self._focus_guided_action, "measurements")
             case "choose-treatment-archive":
                 self._open_page("history")
             case "use-archive-treatment":

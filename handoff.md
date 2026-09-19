@@ -1,6 +1,35 @@
 # Handoff — `piscine-ph`
 
-Mise à jour : 13 septembre 2026
+Mise à jour : 14 septembre 2026
+
+## Ajustement local : largeur des archives
+
+La page **Archives** utilise maintenant toute la largeur disponible du terminal,
+au lieu de la limite de 72 colonnes des formulaires. Le tableau s'élargit avec
+la fenêtre ; le défilement horizontal reste disponible sur les petits terminaux.
+Modification locale dans le CSS de `src/piscine_ph/tui.py` (`#history-content`).
+
+Validation : redimensionnement Textual à 80, 180 et 220 colonnes avec une ligne
+contenant deux noms d'archives ; aucun défilement horizontal à 180 et 220.
+Ruff et les deux tests ciblés de lecture/sélection des archives passent.
+Aucun commit ni changement distant effectué pour cet ajustement.
+
+## Ajustement local : action de désinfection visible
+
+Le haut de la page désinfection présente maintenant un encadré avec un titre
+gras et souligné, la mesure de chlore, les seuils, le dernier CYA et la suite
+adaptée. `ProtocolService.disinfection_action()` fournit aussi ce message à
+l'assistant guidé. Lorsque les galets sont consommés et le chlore trop bas,
+un bouton ouvre le journal de recharge. Les galets en place, le CYA élevé et
+le chlore dans/au-dessus de la plage ne déclenchent pas cette proposition.
+Après une recharge postérieure à la mesure, le bandeau indique le nombre de
+galets déjà ajoutés et propose un nouveau contrôle, sans demander un autre ajout.
+
+Cas utilisateur vérifié sur une copie de l'archive du 14 septembre dans
+`/Users/frchalaoux/Desktop/piscine-ph-test` : chlore 0,5 ppm, plage 1–4 ppm,
+2 galets ajoutés après la mesure, CYA 20 ppm. Les données originales restent
+inchangées. Cinq nouveaux cas de test couvrent le parcours par clic et les
+conditions de non-recharge. Aucun changement distant.
 
 ## Reprise rapide
 

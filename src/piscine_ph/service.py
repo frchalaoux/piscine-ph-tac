@@ -67,6 +67,58 @@ class ProtocolService:
     SULFURIC_ACID_15_ML_PER_10_M3_PER_0_1_PH = 75.0
     MAX_ACID_BATCH_PH = 0.1
 
+    @staticmethod
+    def disinfection_action(state: ProtocolState) -> GuidedAction:
+        """Présente la décision chlore et la suite adaptée au traitement enregistré."""
+        def result(label: str, instruction: str, trigger: str = "open") -> GuidedAction:
+            return GuidedAction("treatment", label, instruction, trigger)
+
+        if ProtocolService.missing_treatment_fields(state.treatment):
+            return result("Installation à préciser", "Déclarez la désinfection et les appareils.")
+        latest = state.water_measurements[-1] if state.water_measurements else None
+        if latest is None or latest.free_chlorine_ppm is None:
+            return result("Chlore à mesurer", "Enregistrez une mesure de chlore libre avant de décider.")
+        chlorine = latest.free_chlorine_ppm
+        minimum = state.config.free_chlorine_min_ppm
+        maximum = state.config.free_chlorine_max_ppm
+        values = (f"Chlore libre : {chlorine:g} ppm · plage déclarée : "
+                  f"{minimum:g} à {maximum:g} ppm.\n")
+        if state.cyanuric_acid_measurements:
+            values += f"Dernier CYA enregistré : {state.cyanuric_acid_measurements[-1].cya_ppm:g} ppm.\n"
+        if chlorine > maximum:
+            return result("Chlore trop haut — ne pas ajouter de chlore", values +
+                          "Suivez l’étiquette et contrôlez à nouveau le chlore libre.")
+        if chlorine >= minimum:
+            return result("Chlore dans la plage déclarée", values +
+                          "Aucune recharge sur la base de cette mesure. Poursuivez les contrôles.")
+        title = "Chlore trop bas — action nécessaire"
+        if state.treatment.disinfection_method is not DisinfectionMethod.STABILIZED_TABLETS:
+            return result(title, values + "Rétablissez la désinfection selon la notice du traitement "
+                          "déclaré, puis mesurez à nouveau le chlore libre.")
+        if (state.cyanuric_acid_measurements
+                and state.cyanuric_acid_measurements[-1].cya_ppm >= 50):
+            return result(title, values + "CYA à 50 ppm ou plus : ne pas ajouter de galets stabilisés. "
+                          "Suivez les consignes de renouvellement d’eau et l’étiquette.")
+        additions = [record for record in state.stabilized_tablets
+                     if record.recorded_at.timestamp() >= latest.recorded_at.timestamp()]
+        if additions:
+            return result("Recharge enregistrée — chlore à recontrôler", values +
+                          f"{sum(record.count for record in additions)} galet(s) ajouté(s) après "
+                          "cette mesure. Laissez agir selon la notice, puis "
+                          "enregistrez une nouvelle mesure avant de décider d’un autre ajout.")
+        if state.treatment.stabilized_tablet_status is StabilizedTabletStatus.ACTIVE:
+            return result(title, values + "Des galets sont déjà en place : vérifiez le doseur, "
+                          "la filtration et la notice avant toute recharge. Contrôlez le CYA "
+                          "et mesurez à nouveau le chlore libre.")
+        if state.treatment.stabilized_tablet_status is not StabilizedTabletStatus.CONSUMED:
+            return result(title, values + "Vérifiez l’état déclaré des galets et la notice "
+                          "avant de décider d’une recharge, puis recontrôlez le chlore libre.")
+        return result(title, values +
+                      "Recharge de galets à prévoir : vérifiez le CYA et la quantité indiquée "
+                      "sur l’étiquette avant l’ajout. Enregistrez ensuite les galets réellement "
+                      "ajoutés, puis recontrôlez le chlore après le délai prévu par la notice.",
+                      "record_tablets")
+
     def active(self) -> ProtocolState:
         """Retourne le protocole actif ou explique à l'appelant comment en créer un."""
         state = self.repository.active()
@@ -179,9 +231,11 @@ class ProtocolService:
         if state.config.mode is ProtocolMode.WATER_MONITORING and state.water_measurements:
             return ProtocolService.water_follow_up_action(state)
         if state.config.mode is ProtocolMode.DISINFECTION_MONITORING and state.water_measurements:
+            decision = ProtocolService.disinfection_action(state)
             return GuidedAction(
                 "treatment",
                 "Consulter le bilan de désinfection",
+                decision.label + " — " + decision.instruction + "\n"
                 "Mesure enregistrée — Consultez le bilan et les seuils de chlore libre. "
                 "Le suivi reste ouvert pour vos prochains contrôles ; aucune nouvelle saisie "
                 "immédiate n’est demandée. Vous pouvez gérer le traitement, ajouter une mesure "
