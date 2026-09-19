@@ -1,8 +1,13 @@
 # piscine-ph
 
-Outil en ligne de commande pour suivre une correction progressive du pH, du TAC et du désinfectant d'une piscine.
+Application de suivi du pH, du TAC et de la désinfection d'une piscine. Elle propose deux interfaces pour les mêmes protocoles et les mêmes archives :
 
-## Installation et lancement
+- **TUI** : interface à menus dans le terminal, avec un assistant guidé, des formulaires de mesure et l'accès aux archives.
+- **CLI** : commandes à saisir dans le terminal, utiles pour suivre les étapes une à une ou automatiser des opérations.
+
+L'application enregistre les mesures et les ajouts confirmés. Elle ne verse aucun produit et ne remplace ni les mesures du bassin, ni l'étiquette ou la fiche de données de sécurité du produit utilisé.
+
+## Installation
 
 Sur macOS ou Linux, une seule commande installe `uv` si nécessaire, puis l'application :
 
@@ -16,7 +21,21 @@ Sous Windows 10 ou 11, ouvrir Windows PowerShell et exécuter (Git n'est pas né
 irm https://raw.githubusercontent.com/frchalaoux/piscine-ph-tac/v0.2.6/install.ps1 | iex
 ```
 
-Ensuite, depuis n'importe quel dossier (rouvrir le terminal après une première installation de `uv`) :
+Après une première installation de `uv`, rouvrir le terminal avant de lancer `piscine-ph`.
+
+## Utiliser l'interface à menus (TUI)
+
+```bash
+piscine-ph tui
+```
+
+La page **Accueil** ouvre l'**Assistant guidé** : il affiche la prochaine action adaptée au protocole actif et conduit au formulaire correspondant. Le menu **Protocoles** permet de mesurer l'eau, corriger le pH ou le TAC et gérer la désinfection. **Archives** permet de retrouver les suivis précédents ; **Aide** présente les commandes et les raccourcis.
+
+L'assistant attend une mesure réelle après chaque lot préparé. Le **Mode manuel** donne un accès direct aux parcours sans retour automatique à l'assistant. Le [guide utilisateur](docs/guide-utilisateur.md) détaille les écrans et leur fonctionnement.
+
+## Utiliser les commandes (CLI)
+
+Pour démarrer ou reprendre un protocole, consulter son état et suivre la prochaine étape dans le menu guidé de la CLI :
 
 ```bash
 piscine-ph start
@@ -24,56 +43,34 @@ piscine-ph status
 piscine-ph menu
 ```
 
-Le suivi est stocke dans `data/protocoles/` : chaque protocole est archive dans son propre fichier JSON date.
-
-Voir le [guide utilisateur](docs/guide-utilisateur.md) pour l'utilisation pas a pas, la [documentation technique](docs/protocole_ph_tac.md) pour les calculs et limites scientifiques, et le [guide développeur](docs/guide-developpeur.md) pour l'architecture et la maintenance.
-Le [sommaire général de la documentation](DOCUMENTATION.md) présente tous les documents du dossier `docs/` avec des liens HTTP et un résumé de chacun.
-Le rôle de chaque parcours, ses valeurs et son bon moment d'utilisation sont décrits dans le [guide de choix des protocoles](docs/choisir-un-protocole.md).
-Les paramètres par défaut versionnés sont décrits dans la [documentation de configuration](docs/configuration.md).
-La structure et la lecture des paramètres et archives sont détaillées dans la [référence des fichiers JSON](docs/fichiers-json.md).
-Pour apprendre rapidement les bases pH/TAC, lire aussi le [guide de chimie](docs/comprendre-la-chimie.md).
-Le cas temporaire « électrolyse arrêtée et galets stabilisés » est traité dans le [guide dédié](docs/traitement-chlore-stabilise.md).
-Le cas « pH haut, TAC à confirmer et chlore faible ou fort » est décrit dans le [guide de surveillance](docs/surveillance-ph-haut-chlore.md).
-Les profils des produits déclarés, les FDS associées et les limites de sécurité sont réunis dans le [guide produits et sécurité](docs/produits-et-securite.md).
-La méthode manuelle pour récupérer puis vérifier une FDS est détaillée dans le [guide de recherche des FDS](docs/rechercher-une-fds.md) ; l’application ne fait aucune recherche ou interprétation automatique.
-
-## Commandes principales
+`piscine-ph menu` est un menu pas à pas dans la CLI ; l'interface à menus complète se lance avec `piscine-ph tui`. Selon le parcours en cours, l'application indique la commande suivante. Exemples :
 
 ```bash
-piscine-ph start
 piscine-ph protocols
 piscine-ph dose
-piscine-ph dose-acid
-piscine-ph measure-acid --ph 7.4 --tac 80
-piscine-ph cancel-dose
-piscine-ph cancel-acid-dose
-piscine-ph cancel-tac-plan
-piscine-ph correct-last-measurement --ph 4.5 --tac 50
-piscine-ph cancel-protocol
 piscine-ph measure --ph 5.2 --tac 50
 piscine-ph plan-tac --tac 50
 piscine-ph measure-tac --ph 6.1 --tac 80
+piscine-ph dose-acid
+piscine-ph measure-acid --ph 7.4 --tac 80
 piscine-ph treatment --electrolysis arretee --disinfection galets_stabilises
 piscine-ph record-tablets --count 2 --unit-mass-g 200
 piscine-ph plan-tablets
 piscine-ph measure-cya --cya 35
-piscine-ph tui
-piscine-ph start --no-guided --force --mode surveillance_ph_haut --initial-ph 7.6 --target-ph 7.2 --initial-tac 70 --chlorine-min 1 --chlorine-max 4 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
-piscine-ph record-water --ph 7.6 --tac 70 --free-chlorine 0.5
-piscine-ph start --no-guided --force --mode correction_hausse_tac --initial-tac 60 --target-tac 80 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
-piscine-ph start --no-guided --force --mode correction_baisse_ph --initial-ph 7.6 --target-ph 7.2 --disinfection chlore_non_stabilise --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
-piscine-ph start --no-guided --force --mode surveillance_desinfectant --disinfection galets_stabilises --tablet-product trichlore_lent_gcchllec --electrolysis non_installe --ph-regulator non_installe --tablets non_necessaires
 piscine-ph history
-piscine-ph json
 ```
 
-`piscine-ph start` reprend automatiquement le dernier protocole non terminé.
-Utiliser `--force` uniquement pour créer une nouvelle archive malgré un protocole actif.
+`start` reprend le dernier protocole non terminé. L'option `--force` crée une nouvelle archive malgré un protocole actif ; à utiliser seulement si c'est voulu. Le [guide utilisateur](docs/guide-utilisateur.md) explique les parcours, les commandes de correction et les annulations.
 
-Pour une baisse de pH avec l'IRRIPOOL PH- LIQUIDE 15 %, le programme prépare
-un seul lot plafonné à 0,1 unité de pH, à confirmer par une mesure pH/TAC avant
-tout autre lot. Pour les galets, `plan-tablets` est une proposition issue de
-l'étiquette, jamais un ajout enregistré automatiquement.
+Pour une baisse de pH avec l'IRRIPOOL PH- LIQUIDE 15 %, l'application prépare un seul lot plafonné à 0,1 unité de pH, à confirmer par une mesure pH/TAC avant tout autre lot. Pour les galets, `plan-tablets` propose une quantité issue de l'étiquette ; seul `record-tablets` enregistre un ajout réellement effectué.
+
+Les deux interfaces enregistrent les suivis dans `data/protocoles/`, relativement au dossier depuis lequel l'application est lancée. Relancer l'application depuis ce même dossier permet de retrouver les mêmes archives.
+
+## Documentation
+
+Le [sommaire général](DOCUMENTATION.md) présente tous les documents de `docs/` avec un résumé et un lien HTTP vers chacun. Pour commencer, consulter le [guide de choix des protocoles](docs/choisir-un-protocole.md), le [guide de chimie pH/TAC](docs/comprendre-la-chimie.md) et le [guide utilisateur](docs/guide-utilisateur.md).
+
+La [documentation technique](docs/protocole_ph_tac.md) décrit les calculs et leurs limites ; le [guide développeur](docs/guide-developpeur.md) couvre l'architecture et la maintenance. Les [produits et consignes de sécurité](docs/produits-et-securite.md) ainsi que la [recherche manuelle d'une FDS](docs/rechercher-une-fds.md) sont documentés séparément.
 
 ## Mises à jour
 
